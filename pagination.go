@@ -60,12 +60,12 @@ type PageToken struct {
 	// Offset is the number of rows preceding this page.
 	Offset int64
 	// Cursor is the sort-key tuple of the last row of the previous page.
-	Cursor Cursor
+	Cursor PageCursor
 	// RequestChecksum is the checksum of the request that produced this token.
 	RequestChecksum uint32
 }
 
-// Cursor is the ordered tuple of sort-key values identifying the last row of
+// PageCursor is the ordered tuple of sort-key values identifying the last row of
 // a page, for key-set (a.k.a. "seek") pagination.
 //
 // A cursor is only meaningful alongside the `order_by` that produced it: the
@@ -94,9 +94,9 @@ type PageToken struct {
 // decoded cursor is not always ==-comparable with the value that produced it.
 // The widening is lossless and keeps the wire format small; comparisons
 // against a database column are unaffected.
-type Cursor []any
+type PageCursor []any
 
-// Cursor value type tags. These are wire format — never renumber them.
+// PageCursor value type tags. These are wire format — never renumber them.
 // Adding a type means appending a new tag and bumping [pageTokenVersion].
 const (
 	tagNil      byte = 0x00
@@ -115,7 +115,7 @@ const (
 //
 // [PageToken.Encode] calls this, so checking up front is only necessary when
 // you want to reject a bad cursor before building a token.
-func (c Cursor) Validate() error {
+func (c PageCursor) Validate() error {
 	for i, value := range c {
 		if _, err := appendCursorValue(nil, value); err != nil {
 			return fmt.Errorf("cursor value %d: %w", i, err)
@@ -211,7 +211,7 @@ func (t PageToken) NextCursor(message proto.Message, paths ...string) (PageToken
 		return PageToken{}, errors.New("next cursor: no ordering paths")
 	}
 	reflected := message.ProtoReflect()
-	cursor := make(Cursor, 0, len(paths))
+	cursor := make(PageCursor, 0, len(paths))
 	for _, path := range paths {
 		leaf, err := protopath.Get(reflected, path)
 		if err != nil {
@@ -297,7 +297,7 @@ func wellKnownCursorValue(message protoreflect.Message) (any, error) {
 // client as `next_page_token`.
 //
 // It reports an error rather than emitting a corrupt token when the cursor
-// holds an unsupported value; see [Cursor] for the supported set.
+// holds an unsupported value; see [PageCursor] for the supported set.
 func (t PageToken) Encode() (string, error) {
 	buffer := make([]byte, 0, 32)
 	buffer = append(buffer, pageTokenVersion)
@@ -350,7 +350,7 @@ func DecodePageToken(s string) (PageToken, error) {
 	}
 	token := PageToken{Offset: offset, RequestChecksum: checksum}
 	if length > 0 {
-		token.Cursor = make(Cursor, 0, length)
+		token.Cursor = make(PageCursor, 0, length)
 		for range length {
 			var value any
 			if value, raw, err = consumeCursorValue(raw); err != nil {
@@ -448,7 +448,7 @@ func appendCursorValue(dst []byte, value any) ([]byte, error) {
 	case float64:
 		return appendCursorFloat(dst, v), nil
 	default:
-		return nil, fmt.Errorf("unsupported type %T (see aip.Cursor for the supported set)", value)
+		return nil, fmt.Errorf("unsupported type %T (see aip.PageCursor for the supported set)", value)
 	}
 }
 

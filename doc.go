@@ -37,7 +37,7 @@
 //   - AIP-122 resource names — [ResourcePattern] (the runtime behind generated name types)
 //   - AIP-132 ordering — [OrderBy], [ParseOrderBy]
 //   - AIP-134 field masks — [ValidateFieldMask], [IsFullReplacement]
-//   - AIP-158 pagination — [PageToken], [ParsePageToken], [Cursor]
+//   - AIP-158 pagination — [PageToken], [ParsePageToken], [PageCursor]
 //   - AIP-203 field behavior — [ClearFields], [ValidateRequiredFields]
 //
 // See: https://google.aip.dev.

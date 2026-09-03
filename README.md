@@ -11,7 +11,7 @@ import "github.com/protoc-contrib/aip-go"
 ```
 
 Everything is one package, so a handler reads as `aip.OrderBy`,
-`aip.PageToken`, `aip.Cursor` — names are prefixed by the AIP concept, not by
+`aip.PageToken`, `aip.PageCursor` — names are prefixed by the AIP concept, not by
 a package path.
 
 ## Status
@@ -66,7 +66,7 @@ if len(books) == int(request.GetPageSize()) {
   sort-key tuple of the last row. Constant cost per page and stable under
   concurrent writes, provided the trailing `order_by` field is unique.
 
-`Cursor` values are restricted to a fixed set of types (`nil`, `bool`,
+`PageCursor` values are restricted to a fixed set of types (`nil`, `bool`,
 `string`, `[]byte`, the sized integers, floats, `time.Time`, `time.Duration`)
 and are encoded with an explicit type tag per value. An unsupported value is
 an error from `Encode`, never a silently truncated token.

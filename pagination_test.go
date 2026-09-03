@@ -32,40 +32,40 @@ var _ = Describe("PageToken", func() {
 			Entry("negative offset", aip.PageToken{Offset: -1}),
 			Entry("max checksum", aip.PageToken{RequestChecksum: math.MaxUint32}),
 			Entry("string cursor", aip.PageToken{
-				Offset: 10, Cursor: aip.Cursor{"Bob", "uuid-7"}, RequestChecksum: 0xdeadbeef,
+				Offset: 10, Cursor: aip.PageCursor{"Bob", "uuid-7"}, RequestChecksum: 0xdeadbeef,
 			}),
 			// The case that silently corrupted the token under gob.
 			Entry("timestamp cursor", aip.PageToken{
-				Offset: 10, Cursor: aip.Cursor{time.Unix(1700000000, 123456789).UTC()},
+				Offset: 10, Cursor: aip.PageCursor{time.Unix(1700000000, 123456789).UTC()},
 			}),
-			Entry("duration cursor", aip.PageToken{Cursor: aip.Cursor{5 * time.Second}}),
+			Entry("duration cursor", aip.PageToken{Cursor: aip.PageCursor{5 * time.Second}}),
 			Entry("mixed cursor", aip.PageToken{
 				Offset: 3,
-				Cursor: aip.Cursor{
+				Cursor: aip.PageCursor{
 					"Alice", int64(7), uint64(9), 1.5, true, false, nil,
 					[]byte{0x00, 0xff}, time.Unix(0, 0).UTC(), time.Duration(0),
 				},
 				RequestChecksum: 1,
 			}),
-			Entry("nil-only cursor", aip.PageToken{Cursor: aip.Cursor{nil, nil}}),
-			Entry("empty string cursor", aip.PageToken{Cursor: aip.Cursor{""}}),
-			Entry("min int cursor", aip.PageToken{Cursor: aip.Cursor{int64(math.MinInt64)}}),
-			Entry("max uint cursor", aip.PageToken{Cursor: aip.Cursor{uint64(math.MaxUint64)}}),
+			Entry("nil-only cursor", aip.PageToken{Cursor: aip.PageCursor{nil, nil}}),
+			Entry("empty string cursor", aip.PageToken{Cursor: aip.PageCursor{""}}),
+			Entry("min int cursor", aip.PageToken{Cursor: aip.PageCursor{int64(math.MinInt64)}}),
+			Entry("max uint cursor", aip.PageToken{Cursor: aip.PageCursor{uint64(math.MaxUint64)}}),
 		)
 
 		It("widens sized numeric types to their 64-bit form", func() {
-			token := aip.PageToken{Cursor: aip.Cursor{int32(1), uint32(2), float32(0.5)}}
+			token := aip.PageToken{Cursor: aip.PageCursor{int32(1), uint32(2), float32(0.5)}}
 			encoded, err := token.Encode()
 			Expect(err).NotTo(HaveOccurred())
 
 			decoded, err := aip.DecodePageToken(encoded)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(decoded.Cursor).To(Equal(aip.Cursor{int64(1), uint64(2), float64(0.5)}))
+			Expect(decoded.Cursor).To(Equal(aip.PageCursor{int64(1), uint64(2), float64(0.5)}))
 		})
 
 		It("normalizes timestamps to UTC", func() {
 			zone := time.FixedZone("UTC+4", 4*60*60)
-			token := aip.PageToken{Cursor: aip.Cursor{time.Unix(1700000000, 0).In(zone)}}
+			token := aip.PageToken{Cursor: aip.PageCursor{time.Unix(1700000000, 0).In(zone)}}
 			encoded, err := token.Encode()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -78,7 +78,7 @@ var _ = Describe("PageToken", func() {
 		It("produces URL-safe tokens", func() {
 			token := aip.PageToken{
 				Offset:          math.MaxInt64,
-				Cursor:          aip.Cursor{"a/b+c=d?e&f"},
+				Cursor:          aip.PageCursor{"a/b+c=d?e&f"},
 				RequestChecksum: math.MaxUint32,
 			}
 			encoded, err := token.Encode()
@@ -89,7 +89,7 @@ var _ = Describe("PageToken", func() {
 
 	Describe("Encode", func() {
 		It("reports an error instead of emitting a corrupt token", func() {
-			token := aip.PageToken{Cursor: aip.Cursor{struct{ A int }{1}}}
+			token := aip.PageToken{Cursor: aip.PageCursor{struct{ A int }{1}}}
 
 			encoded, err := token.Encode()
 			Expect(err).To(MatchError(ContainSubstring("cursor value 0")))
@@ -231,7 +231,7 @@ var _ = Describe("PageToken", func() {
 		It("extracts fields in path order", func() {
 			token, err := aip.PageToken{}.NextCursor(book, "title", "name")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(token.Cursor).To(Equal(aip.Cursor{"Dune", "books/1"}))
+			Expect(token.Cursor).To(Equal(aip.PageCursor{"Dune", "books/1"}))
 		})
 
 		DescribeTable("maps each field kind to its cursor value",
@@ -257,7 +257,7 @@ var _ = Describe("PageToken", func() {
 		It("resolves dotted paths into nested messages", func() {
 			token, err := aip.PageToken{}.NextCursor(book, "author.name", "author.country")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(token.Cursor).To(Equal(aip.Cursor{"Herbert", "US"}))
+			Expect(token.Cursor).To(Equal(aip.PageCursor{"Herbert", "US"}))
 		})
 
 		It("yields nil for an unset message field rather than a zero value", func() {
@@ -265,13 +265,13 @@ var _ = Describe("PageToken", func() {
 
 			token, err := aip.PageToken{}.NextCursor(book, "create_time")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(token.Cursor).To(Equal(aip.Cursor{nil}))
+			Expect(token.Cursor).To(Equal(aip.PageCursor{nil}))
 		})
 
 		It("yields nil for an unset optional scalar", func() {
 			token, err := aip.PageToken{}.NextCursor(book, "edition")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(token.Cursor).To(Equal(aip.Cursor{nil}))
+			Expect(token.Cursor).To(Equal(aip.PageCursor{nil}))
 		})
 
 		It("yields nil when an intermediate message on the path is unset", func() {
@@ -279,7 +279,7 @@ var _ = Describe("PageToken", func() {
 
 			token, err := aip.PageToken{}.NextCursor(book, "author.name")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(token.Cursor).To(Equal(aip.Cursor{nil}))
+			Expect(token.Cursor).To(Equal(aip.PageCursor{nil}))
 		})
 
 		It("treats an explicit zero on a presence-less field as a real value", func() {
@@ -287,7 +287,7 @@ var _ = Describe("PageToken", func() {
 
 			token, err := aip.PageToken{}.NextCursor(book, "read_count")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(token.Cursor).To(Equal(aip.Cursor{int64(0)}))
+			Expect(token.Cursor).To(Equal(aip.PageCursor{int64(0)}))
 		})
 
 		It("preserves the offset and checksum it was called on", func() {
@@ -326,7 +326,7 @@ var _ = Describe("PageToken", func() {
 
 			decoded, err := aip.DecodePageToken(encoded)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(decoded.Cursor).To(Equal(aip.Cursor{
+			Expect(decoded.Cursor).To(Equal(aip.PageCursor{
 				time.Unix(1700000000, 0).UTC(), 90 * time.Minute, "books/1",
 			}))
 		})
@@ -339,7 +339,7 @@ var _ = Describe("PageToken", func() {
 			token, err := aip.PageToken{}.NextCursor(book, orderBy.Paths()...)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(token.Cursor).To(HaveLen(len(orderBy.Fields)))
-			Expect(token.Cursor).To(Equal(aip.Cursor{
+			Expect(token.Cursor).To(Equal(aip.PageCursor{
 				"Herbert", time.Unix(1700000000, 0).UTC(), "books/1",
 			}))
 		})
@@ -356,10 +356,10 @@ var _ = Describe("PageToken", func() {
 	})
 })
 
-var _ = Describe("Cursor", func() {
+var _ = Describe("PageCursor", func() {
 	Describe("Validate", func() {
 		It("accepts every supported type", func() {
-			cursor := aip.Cursor{
+			cursor := aip.PageCursor{
 				nil, true, "s", []byte{1}, 1, int8(1), int16(1), int32(1), int64(1),
 				uint(1), uint8(1), uint16(1), uint32(1), uint64(1),
 				float32(1), float64(1), time.Now(), time.Second,
@@ -368,7 +368,7 @@ var _ = Describe("Cursor", func() {
 		})
 
 		It("names the offending index", func() {
-			cursor := aip.Cursor{"ok", make(chan int)}
+			cursor := aip.PageCursor{"ok", make(chan int)}
 			Expect(cursor.Validate()).To(MatchError(ContainSubstring("cursor value 1")))
 		})
 	})
