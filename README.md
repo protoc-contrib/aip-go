@@ -59,7 +59,7 @@ if len(books) == int(request.GetPageSize()) {
 
 `PageToken` supports both AIP-158 styles. Pick one per List method:
 
-- **Offset** — `token.Next(request)` advances by `page_size`. Simple, but
+- **Offset** — `token.NextOffset(request)` advances by `page_size`. Simple, but
   skipping rows gets more expensive with each page and concurrent writes shift
   rows across page boundaries.
 - **Key-set** — `token.NextCursor(lastRow, orderBy.Paths()...)` records the

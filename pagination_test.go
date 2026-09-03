@@ -140,7 +140,7 @@ var _ = Describe("PageToken", func() {
 			first, err := aip.ParsePageToken(request)
 			Expect(err).NotTo(HaveOccurred())
 
-			encoded, err := first.Next(request).Encode()
+			encoded, err := first.NextOffset(request).Encode()
 			Expect(err).NotTo(HaveOccurred())
 
 			next := &testpb.ListBooksRequest{
@@ -155,7 +155,7 @@ var _ = Describe("PageToken", func() {
 			request := &testpb.ListBooksRequest{Parent: "shelves/1", PageSize: 10, Filter: "a=b"}
 			token, err := aip.ParsePageToken(request)
 			Expect(err).NotTo(HaveOccurred())
-			encoded, err := token.Next(request).Encode()
+			encoded, err := token.NextOffset(request).Encode()
 			Expect(err).NotTo(HaveOccurred())
 
 			tampered := &testpb.ListBooksRequest{
@@ -169,7 +169,7 @@ var _ = Describe("PageToken", func() {
 			request := &testpb.ListBooksRequest{Parent: "shelves/1", PageSize: 10}
 			token, err := aip.ParsePageToken(request)
 			Expect(err).NotTo(HaveOccurred())
-			encoded, err := token.Next(request).Encode()
+			encoded, err := token.NextOffset(request).Encode()
 			Expect(err).NotTo(HaveOccurred())
 
 			resized := &testpb.ListBooksRequest{Parent: "shelves/1", PageSize: 50, PageToken: encoded}
@@ -349,7 +349,7 @@ var _ = Describe("PageToken", func() {
 		It("advances the offset by the page size", func() {
 			request := &testpb.ListBooksRequest{PageSize: 25}
 
-			token := aip.PageToken{Offset: 50, RequestChecksum: 3}.Next(request)
+			token := aip.PageToken{Offset: 50, RequestChecksum: 3}.NextOffset(request)
 			Expect(token.Offset).To(Equal(int64(75)))
 			Expect(token.RequestChecksum).To(Equal(uint32(3)))
 		})
