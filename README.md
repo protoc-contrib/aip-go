@@ -144,6 +144,13 @@ same single allocation.
 There is deliberately no runtime parser taking a pattern string as public API:
 callers get `ParseBookName(s)`, never `Scan(s, "publishers/{publisher}/...")`.
 
+`ResourceName` is the interface every generated name type satisfies, for code
+that must handle a name without knowing which one it is — logging, authz,
+audit middleware. Satisfaction is structural, so generated files need no
+import of this package to conform. It deliberately omits `Parent()`, which
+returns a *concrete* parent type and is the main reason to use the generated
+type directly when you know it.
+
 ## Development
 
 ```bash

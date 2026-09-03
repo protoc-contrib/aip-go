@@ -209,3 +209,68 @@ var _ = Describe("ResourcePattern", func() {
 		})
 	})
 })
+
+// bookName mirrors the shape protoc-gen-go-aip emits, including the
+// delegation to a package-scope compiled pattern. It exists to prove the
+// generated shape satisfies aip.ResourceName structurally.
+type bookName struct {
+	PublisherID string
+	BookID      string
+}
+
+var bookNamePattern = aip.MustCompileResourcePattern("publishers/{publisher}/books/{book}")
+
+func parseBookName(s string) (bookName, error) {
+	var out bookName
+	if err := bookNamePattern.Scan(s, &out.PublisherID, &out.BookID); err != nil {
+		return bookName{}, err
+	}
+	return out, nil
+}
+
+func (n bookName) String() string   { return bookNamePattern.Format(n.PublisherID, n.BookID) }
+func (n bookName) FullName() string { return "//example.com/" + n.String() }
+func (n bookName) Type() string     { return "example.com/Book" }
+func (n bookName) Pattern() string  { return bookNamePattern.String() }
+func (n bookName) Validate() error  { return bookNamePattern.Validate(n.PublisherID, n.BookID) }
+
+func (n bookName) MarshalText() ([]byte, error) { return []byte(n.String()), nil }
+
+func (n bookName) ContainsWildcard() bool {
+	return aip.ContainsWildcard(n.PublisherID, n.BookID)
+}
+
+var _ = Describe("ResourceName", func() {
+	It("is satisfied by the generated resource name shape", func() {
+		var name aip.ResourceName = bookName{PublisherID: "p1", BookID: "b1"}
+
+		Expect(name.String()).To(Equal("publishers/p1/books/b1"))
+		Expect(name.FullName()).To(Equal("//example.com/publishers/p1/books/b1"))
+		Expect(name.Type()).To(Equal("example.com/Book"))
+		Expect(name.Pattern()).To(Equal("publishers/{publisher}/books/{book}"))
+		Expect(name.Validate()).To(Succeed())
+		Expect(name.ContainsWildcard()).To(BeFalse())
+
+		text, err := name.MarshalText()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(text)).To(Equal("publishers/p1/books/b1"))
+	})
+
+	It("round-trips through the delegated pattern", func() {
+		parsed, err := parseBookName("publishers/p1/books/b1")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parsed).To(Equal(bookName{PublisherID: "p1", BookID: "b1"}))
+		Expect(parsed.String()).To(Equal("publishers/p1/books/b1"))
+	})
+
+	It("reports a wildcard segment through the interface", func() {
+		var name aip.ResourceName = bookName{PublisherID: "-", BookID: "b1"}
+		Expect(name.ContainsWildcard()).To(BeTrue())
+		Expect(name.Validate()).To(Succeed())
+	})
+
+	It("surfaces an invalid segment through Validate", func() {
+		var name aip.ResourceName = bookName{PublisherID: "p1", BookID: ""}
+		Expect(name.Validate()).To(MatchError("book: empty"))
+	})
+})
