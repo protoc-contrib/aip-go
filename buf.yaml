@@ -1,0 +1,18 @@
+version: v2
+
+# The only protos here are the test fixtures under internal/testpb; this
+# module publishes no schema. Regenerate fixtures with `buf generate`.
+modules:
+  - path: .
+
+deps:
+  - buf.build/googleapis/googleapis
+
+lint:
+  use:
+    - BASIC
+  except:
+    # Fixtures use the plain "tests.*" package style rather than a versioned
+    # suffix, and live in a directory that does not match the package.
+    - PACKAGE_VERSION_SUFFIX
+    - PACKAGE_DIRECTORY_MATCH

@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+// Package tests holds fixtures for exercising the pagination and ordering
+// packages. It is not part of the public API.
+package tests;
+
+import "google/api/field_behavior.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/protoc-contrib/aip-go/internal/testpb";
+
+enum Genre {
+  GENRE_UNSPECIFIED = 0;
+  GENRE_FICTION = 1;
+  GENRE_HISTORY = 2;
+}
+
+message Author {
+  string name = 1;
+  string country = 2;
+}
+
+message Book {
+  string name = 1;
+  string title = 2;
+  Author author = 3;
+  int32 read_count = 4;
+  int64 page_count = 5;
+  uint64 checksum = 6;
+  double rating = 7;
+  bool published = 8;
+  bytes cover = 9;
+  Genre genre = 10;
+  google.protobuf.Timestamp create_time = 11;
+  google.protobuf.Duration read_duration = 12;
+  google.protobuf.StringValue subtitle = 13;
+  optional string edition = 14;
+  repeated string tags = 15;
+  map<string, string> labels = 16;
+}
+
+message ListBooksRequest {
+  string parent = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  string filter = 4;
+  string order_by = 5;
+  map<string, string> labels = 6;
+}
+
+message ListBooksWithSkipRequest {
+  string parent = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  string filter = 4;
+  int32 skip = 5;
+}
+
+// Shipment exercises field behavior (AIP-203) and field masks (AIP-134).
+message Shipment {
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string origin = 2 [(google.api.field_behavior) = REQUIRED];
+  string destination = 3 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.Timestamp create_time = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string notes = 5;
+  string carrier_code = 6 [(google.api.field_behavior) = IMMUTABLE];
+  Carrier carrier = 7;
+  repeated LineItem line_items = 8;
+  map<string, LineItem> keyed_items = 9;
+  // A presence-less required bool: `false` is indistinguishable from unset.
+  bool insured = 10 [(google.api.field_behavior) = REQUIRED];
+  // An explicit-presence required bool: `false` is a real value.
+  optional bool fragile = 11 [(google.api.field_behavior) = REQUIRED];
+  repeated string labels = 12 [(google.api.field_behavior) = REQUIRED];
+}
+
+message Carrier {
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
+  string tracking_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message LineItem {
+  string sku = 1 [(google.api.field_behavior) = REQUIRED];
+  int32 quantity = 2;
+}
+
+message UpdateShipmentRequest {
+  Shipment shipment = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2;
+}

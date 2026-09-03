@@ -1,0 +1,7 @@
+version: v2
+
+plugins:
+  - local: [go, tool, protoc-gen-go]
+    out: .
+    opt:
+      - module=github.com/protoc-contrib/aip-go
