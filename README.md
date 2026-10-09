@@ -10,76 +10,32 @@ generator emits per-request parsers, and the types they return live here.
 import "github.com/protoc-contrib/aip-go"
 ```
 
-Everything is one package, so a handler reads as `aip.OrderBy`,
-`aip.PageToken`, `aip.PageCursor` — names are prefixed by the AIP concept, not by
-a package path.
+Everything is one package, so a handler reads as `aip.ClearFields`,
+`aip.ValidateFieldMask`, `aip.ResourcePattern` — names are prefixed by the AIP
+concept, not by a package path.
 
 ## Status
 
 | AIP | Concept | Status |
 | --- | --- | --- |
 | [122](https://google.aip.dev/122) | resource names | ✅ runtime only |
-| [132](https://google.aip.dev/132#ordering) | `order_by` | ✅ |
-| [158](https://google.aip.dev/158) | `page_token` / `page_size` | ✅ |
+| [132](https://google.aip.dev/132#ordering) | `order_by` | not here — query layer |
+| [158](https://google.aip.dev/158) | `page_token` / `page_size` | not here — query layer |
 | [134](https://google.aip.dev/134) | `update_mask` validation | ✅ |
 | [203](https://google.aip.dev/203) | field behavior | ✅ |
-| [160](https://google.aip.dev/160) | `filter` | planned |
+| [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 
-## Usage
+## Ordering, pagination and filtering
 
-```go
-orderBy, err := aip.ParseOrderBy(request)
-if err != nil {
-        return nil, connect.NewError(connect.CodeInvalidArgument, err)
-}
-if err := orderBy.ValidateForPaths("title", "create_time", "name"); err != nil {
-        return nil, connect.NewError(connect.CodeInvalidArgument, err)
-}
+These are deliberately not in this package. A page token or key-set cursor is
+only meaningful against the resolved ordering, the path-to-column map and the
+SQL that actually runs, none of which are known here, so anything parsed here
+could only disagree with the query layer. That matches the Rust stack, where
+[aip-rs](https://github.com/protoc-contrib/aip-rs) has no page tokens either.
 
-token, err := aip.ParsePageToken(request)
-if err != nil {
-        return nil, connect.NewError(connect.CodeInvalidArgument, err)
-}
-
-books := query(token, orderBy, request.GetPageSize())
-
-var nextPageToken string
-if len(books) == int(request.GetPageSize()) {
-        token, err = token.NextCursor(books[len(books)-1], orderBy.Paths()...)
-        if err != nil {
-                return nil, err
-        }
-        if nextPageToken, err = token.Encode(); err != nil {
-                return nil, err
-        }
-}
-```
-
-## Pagination
-
-`PageToken` supports both AIP-158 styles. Pick one per List method:
-
-- **Offset** — `token.NextOffset(request)` advances by `page_size`. Simple, but
-  skipping rows gets more expensive with each page and concurrent writes shift
-  rows across page boundaries.
-- **Key-set** — `token.NextCursor(lastRow, orderBy.Paths()...)` records the
-  sort-key tuple of the last row. Constant cost per page and stable under
-  concurrent writes, provided the trailing `order_by` field is unique.
-
-`PageCursor` values are restricted to a fixed set of types (`nil`, `bool`,
-`string`, `[]byte`, the sized integers, floats, `time.Time`, `time.Duration`)
-and are encoded with an explicit type tag per value. An unsupported value is
-an error from `Encode`, never a silently truncated token.
-
-Cursor extraction resolves dotted paths (`author.name`), unwraps
-`google.protobuf.Timestamp`, `Duration` and the wrapper types, and yields
-`nil` for an unset message or `optional` field so the query layer can compare
-it as SQL `NULL` rather than as a zero value.
-
-Tokens are versioned, `base64url` without padding, and carry a CRC-32 of the
-request fields that must not change between pages. A client that swaps its
-`filter` mid-page gets `ErrChecksumMismatch`; a corrupt token gets
-`ErrMalformedPageToken`. Both map to `InvalidArgument`.
+Filters are plain CEL: `protoc-gen-go-aip` generates a `ParseFilter()` that
+returns a `*cel.Ast`, which a query layer such as
+[pgxcel](https://github.com/pgx-contrib/pgxcel) transpiles to SQL.
 
 ## Field behavior and field masks
 
