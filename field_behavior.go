@@ -119,6 +119,73 @@ func CopyFields(dst, src proto.Message, behaviors ...FieldBehavior) error {
 	return nil
 }
 
+// ImmutableChanges returns the top-level fields annotated IMMUTABLE that update
+// populates with a value different from the one existing holds, in declaration
+// order. It reads both messages and modifies neither.
+//
+// AIP-203: an IMMUTABLE field may be set on create and never changed
+// afterwards, and a service must reject a request that tries. A client echoing
+// the stored value back is not changing it, and a field update leaves unset is
+// not part of the request — neither is reported. Neither the implied update
+// mask nor the expansion of "*" includes an IMMUTABLE field, so without this
+// check a changed value would be dropped silently rather than refused:
+//
+//	stored, err := repository.Get(ctx, name)
+//	// ...
+//	if changed := aip.ImmutableChanges(stored, req.GetCollection()); len(changed) > 0 {
+//		return status.Errorf(codes.InvalidArgument, "immutable fields cannot change: %v", changed)
+//	}
+//
+// Values are compared as [proto.Equal] compares them, so a message, repeated
+// or map field is compared by content. A nil existing or update — or a typed
+// nil — yields nil. existing and update must be the same message type;
+// different types panic, as [proto.Merge] does, since that is a programming
+// error rather than something a request can cause.
+//
+// See: https://google.aip.dev/203#immutable.
+func ImmutableChanges(existing, update proto.Message) []string {
+	if existing == nil || update == nil {
+		return nil
+	}
+	existingReflect, updateReflect := existing.ProtoReflect(), update.ProtoReflect()
+	if !existingReflect.IsValid() || !updateReflect.IsValid() {
+		return nil
+	}
+	if existingReflect.Descriptor() != updateReflect.Descriptor() {
+		panic(fmt.Sprintf(
+			"immutable changes: existing is %s but update is %s",
+			existingReflect.Descriptor().FullName(), updateReflect.Descriptor().FullName(),
+		))
+	}
+	var changed []string
+	fields := updateReflect.Descriptor().Fields()
+	for i := range fields.Len() {
+		field := fields.Get(i)
+		if !HasFieldBehavior(field, Immutable) || !updateReflect.Has(field) {
+			continue
+		}
+		if !fieldEqual(existingReflect, updateReflect, field) {
+			changed = append(changed, string(field.Name()))
+		}
+	}
+	return changed
+}
+
+// fieldEqual reports whether a and b hold the same value for field, compared
+// as [proto.Equal] compares it: each value is copied alone into a fresh message
+// of the type, so scalars, messages, lists and maps all get proto.Equal's
+// semantics without restating them here.
+func fieldEqual(a, b protoreflect.Message, field protoreflect.FieldDescriptor) bool {
+	only := func(m protoreflect.Message) proto.Message {
+		single := m.New()
+		if m.Has(field) {
+			single.Set(field, m.Get(field))
+		}
+		return single.Interface()
+	}
+	return proto.Equal(only(a), only(b))
+}
+
 // rangeMessages invokes fn for every message reachable through field, whether
 // it is a singular message, a repeated message, or a map with message values.
 // Non-message fields yield nothing.

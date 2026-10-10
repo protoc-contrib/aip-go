@@ -42,8 +42,11 @@ type Shipment struct {
 	// A presence-less required bool: `false` is indistinguishable from unset.
 	Insured bool `protobuf:"varint,10,opt,name=insured,proto3" json:"insured,omitempty"`
 	// An explicit-presence required bool: `false` is a real value.
-	Fragile       *bool    `protobuf:"varint,11,opt,name=fragile,proto3,oneof" json:"fragile,omitempty"`
-	Labels        []string `protobuf:"bytes,12,rep,name=labels,proto3" json:"labels,omitempty"`
+	Fragile *bool    `protobuf:"varint,11,opt,name=fragile,proto3,oneof" json:"fragile,omitempty"`
+	Labels  []string `protobuf:"bytes,12,rep,name=labels,proto3" json:"labels,omitempty"`
+	// IMMUTABLE fields of a message and a repeated shape, for ImmutableChanges.
+	OriginCarrier *Carrier `protobuf:"bytes,13,opt,name=origin_carrier,json=originCarrier,proto3" json:"origin_carrier,omitempty"`
+	Route         []string `protobuf:"bytes,14,rep,name=route,proto3" json:"route,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -158,6 +161,20 @@ func (x *Shipment) GetFragile() bool {
 func (x *Shipment) GetLabels() []string {
 	if x != nil {
 		return x.Labels
+	}
+	return nil
+}
+
+func (x *Shipment) GetOriginCarrier() *Carrier {
+	if x != nil {
+		return x.OriginCarrier
+	}
+	return nil
+}
+
+func (x *Shipment) GetRoute() []string {
+	if x != nil {
+		return x.Route
 	}
 	return nil
 }
@@ -322,7 +339,7 @@ var File_internal_testpb_test_proto protoreflect.FileDescriptor
 
 const file_internal_testpb_test_proto_rawDesc = "" +
 	"\n" +
-	"\x1ainternal/testpb/test.proto\x12\x05tests\x1a\x1fgoogle/api/field_behavior.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbf\x04\n" +
+	"\x1ainternal/testpb/test.proto\x12\x05tests\x1a\x1fgoogle/api/field_behavior.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x96\x05\n" +
 	"\bShipment\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
 	"\x06origin\x18\x02 \x01(\tB\x03\xe0A\x02R\x06origin\x12%\n" +
@@ -339,7 +356,9 @@ const file_internal_testpb_test_proto_rawDesc = "" +
 	"\ainsured\x18\n" +
 	" \x01(\bB\x03\xe0A\x02R\ainsured\x12\"\n" +
 	"\afragile\x18\v \x01(\bB\x03\xe0A\x02H\x00R\afragile\x88\x01\x01\x12\x1b\n" +
-	"\x06labels\x18\f \x03(\tB\x03\xe0A\x02R\x06labels\x1aN\n" +
+	"\x06labels\x18\f \x03(\tB\x03\xe0A\x02R\x06labels\x12:\n" +
+	"\x0eorigin_carrier\x18\r \x01(\v2\x0e.tests.CarrierB\x03\xe0A\x05R\roriginCarrier\x12\x19\n" +
+	"\x05route\x18\x0e \x03(\tB\x03\xe0A\x05R\x05route\x1aN\n" +
 	"\x0fKeyedItemsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12%\n" +
 	"\x05value\x18\x02 \x01(\v2\x0f.tests.LineItemR\x05value:\x028\x01B\n" +
@@ -384,14 +403,15 @@ var file_internal_testpb_test_proto_depIdxs = []int32{
 	1, // 1: tests.Shipment.carrier:type_name -> tests.Carrier
 	2, // 2: tests.Shipment.line_items:type_name -> tests.LineItem
 	4, // 3: tests.Shipment.keyed_items:type_name -> tests.Shipment.KeyedItemsEntry
-	0, // 4: tests.UpdateShipmentRequest.shipment:type_name -> tests.Shipment
-	6, // 5: tests.UpdateShipmentRequest.update_mask:type_name -> google.protobuf.FieldMask
-	2, // 6: tests.Shipment.KeyedItemsEntry.value:type_name -> tests.LineItem
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	1, // 4: tests.Shipment.origin_carrier:type_name -> tests.Carrier
+	0, // 5: tests.UpdateShipmentRequest.shipment:type_name -> tests.Shipment
+	6, // 6: tests.UpdateShipmentRequest.update_mask:type_name -> google.protobuf.FieldMask
+	2, // 7: tests.Shipment.KeyedItemsEntry.value:type_name -> tests.LineItem
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_internal_testpb_test_proto_init() }
