@@ -26,6 +26,9 @@ message Shipment {
   // An explicit-presence required bool: `false` is a real value.
   optional bool fragile = 11 [(google.api.field_behavior) = REQUIRED];
   repeated string labels = 12 [(google.api.field_behavior) = REQUIRED];
+  // IMMUTABLE fields of a message and a repeated shape, for ImmutableChanges.
+  Carrier origin_carrier = 13 [(google.api.field_behavior) = IMMUTABLE];
+  repeated string route = 14 [(google.api.field_behavior) = IMMUTABLE];
 }
 
 message Carrier {

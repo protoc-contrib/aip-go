@@ -10,7 +10,16 @@
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
 //   - AIP-134 field masks — [IsFullReplacement] and [MutablePaths] for "*",
 //     [ImpliedUpdateMask] for an omitted mask
-//   - AIP-203 field behavior — [ClearFields], [CopyFields]
+//   - AIP-203 field behavior — [ClearFields], [CopyFields], and
+//     [ImmutableChanges] to refuse a changed IMMUTABLE value
+//
+// This stack is deliberately stricter than AIP-161 about update masks. AIP-161
+// has a mask that names an OUTPUT_ONLY field ignored; here protovalidate's
+// `field_mask.in` lists only the writable fields, so such a mask is rejected
+// with InvalidArgument — a clearer answer than a silent no-op, and one that
+// protoc-gen-aip-lint's update-mask-writable-fields rule keeps in step with
+// `google.api.field_behavior`. A changed IMMUTABLE value is an error too
+// ([ImmutableChanges]), rather than dropped by the implied mask or by "*".
 //
 // Validation is deliberately absent too. Whether a REQUIRED field is set and
 // whether an update_mask names real fields are protovalidate's rules —

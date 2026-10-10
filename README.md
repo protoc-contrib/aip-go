@@ -24,6 +24,7 @@ concept, not by a package path.
 | [134](https://google.aip.dev/134) | `*` expansion, implied mask | ✅ |
 | [134](https://google.aip.dev/134) | `update_mask` validation | not here — protovalidate `field_mask.in` |
 | [203](https://google.aip.dev/203) | field behavior: clearing, copying | ✅ |
+| [203](https://google.aip.dev/203#immutable) | refusing a changed `IMMUTABLE` value | ✅ `ImmutableChanges` |
 | [203](https://google.aip.dev/203) | `REQUIRED` validation | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 
@@ -94,6 +95,29 @@ or map when non-empty, a oneof member when it is the one set. Two things follow:
 
 `MutablePaths` also keeps a hand-written column map honest — a test that every
 writable path has a column fails when a field is added without one.
+
+**A changed `IMMUTABLE` value is refused, not dropped.** Neither the implied
+mask nor `*` includes an `IMMUTABLE` field, so on their own they would discard a
+new value without a word. AIP-203 has the service reject it instead;
+`ImmutableChanges` names the fields an update changes against the stored
+resource — an echoed-back value is not a change, and an unset field is not part
+of the request:
+
+```go
+stored, err := repository.Get(ctx, name)
+// ...
+if changed := aip.ImmutableChanges(stored, req.GetCollection()); len(changed) > 0 {
+	return status.Errorf(codes.InvalidArgument, "immutable fields cannot change: %v", changed)
+}
+```
+
+**Stricter than AIP-161, on purpose.** AIP-161 has a mask that names an
+`OUTPUT_ONLY` field ignored. Here `field_mask.in` lists only the writable
+fields, so protovalidate rejects such a mask with `InvalidArgument` — a clearer
+answer than a silent no-op, and safer than trusting every caller to know which
+paths are dropped. [protoc-gen-aip-lint](https://github.com/protoc-contrib/protoc-gen-aip-lint)'s
+`update-mask-writable-fields` rule keeps that list equal to the fields
+`google.api.field_behavior` leaves writable.
 
 **Validation is not here, and should not be.** Whether a REQUIRED field is set
 and whether an `update_mask` names real fields are protovalidate's rules —

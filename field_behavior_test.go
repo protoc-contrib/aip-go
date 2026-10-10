@@ -158,4 +158,72 @@ var _ = Describe("FieldBehavior", func() {
 			Expect(proto.Equal(dst, before)).To(BeTrue())
 		})
 	})
+
+	Describe("ImmutableChanges", func() {
+		stored := func() *testpb.Shipment {
+			shipment := validShipment()
+			shipment.CarrierCode = "DHL"
+			shipment.OriginCarrier = &testpb.Carrier{Name: "UPS"}
+			shipment.Route = []string{"BER", "CDG"}
+			return shipment
+		}
+
+		It("reports nothing when every immutable value is echoed back", func() {
+			Expect(aip.ImmutableChanges(stored(), stored())).To(BeEmpty())
+		})
+
+		It("reports each changed immutable field, in declaration order", func() {
+			update := stored()
+			update.Route = []string{"BER", "AMS"}
+			update.CarrierCode = "FedEx"
+			Expect(aip.ImmutableChanges(stored(), update)).To(Equal([]string{"carrier_code", "route"}))
+		})
+
+		It("ignores an immutable field the update leaves unset", func() {
+			update := &testpb.Shipment{Notes: "only this"}
+			Expect(aip.ImmutableChanges(stored(), update)).To(BeEmpty())
+		})
+
+		It("compares a message-typed immutable field by content", func() {
+			update := stored()
+			update.OriginCarrier = &testpb.Carrier{Name: "UPS"}
+			Expect(aip.ImmutableChanges(stored(), update)).To(BeEmpty())
+
+			update.OriginCarrier = &testpb.Carrier{Name: "UPS", TrackingId: "T1"}
+			Expect(aip.ImmutableChanges(stored(), update)).To(Equal([]string{"origin_carrier"}))
+		})
+
+		It("reports setting an immutable field the stored resource never had", func() {
+			existing := validShipment()
+			update := validShipment()
+			update.CarrierCode = "DHL"
+			Expect(aip.ImmutableChanges(existing, update)).To(Equal([]string{"carrier_code"}))
+		})
+
+		It("ignores mutable and output-only fields however they change", func() {
+			update := stored()
+			update.Notes = "different"
+			update.CreateTime = timestamppb.New(time.Unix(1700000000, 0))
+			Expect(aip.ImmutableChanges(stored(), update)).To(BeEmpty())
+		})
+
+		It("returns nil for a nil or typed-nil message", func() {
+			Expect(aip.ImmutableChanges(nil, stored())).To(BeNil())
+			Expect(aip.ImmutableChanges(stored(), nil)).To(BeNil())
+			Expect(aip.ImmutableChanges((*testpb.Shipment)(nil), stored())).To(BeNil())
+		})
+
+		It("panics on two different message types", func() {
+			Expect(func() { aip.ImmutableChanges(stored(), &testpb.Carrier{}) }).To(Panic())
+		})
+
+		It("modifies neither message", func() {
+			existing, update := stored(), stored()
+			update.CarrierCode = "FedEx"
+			before, beforeUpdate := proto.Clone(existing), proto.Clone(update)
+			aip.ImmutableChanges(existing, update)
+			Expect(proto.Equal(existing, before)).To(BeTrue())
+			Expect(proto.Equal(update, beforeUpdate)).To(BeTrue())
+		})
+	})
 })
