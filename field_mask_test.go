@@ -17,12 +17,52 @@ var _ = Describe("FieldMask", func() {
 			func(mask *fieldmaskpb.FieldMask, expected bool) {
 				Expect(aip.IsFullReplacement(mask)).To(Equal(expected))
 			},
-			Entry("nil mask", nil, true),
-			Entry("empty mask", &fieldmaskpb.FieldMask{}, true),
+			// Absent or empty is AIP-134's implied mask, not full replacement.
+			Entry("nil mask", nil, false),
+			Entry("empty mask", &fieldmaskpb.FieldMask{}, false),
 			Entry("wildcard", &fieldmaskpb.FieldMask{Paths: []string{"*"}}, true),
 			Entry("single field", &fieldmaskpb.FieldMask{Paths: []string{"origin"}}, false),
 			Entry("wildcard with another path", &fieldmaskpb.FieldMask{Paths: []string{"*", "origin"}}, false),
 		)
+
+		It("does not read an empty implied mask as full replacement", func() {
+			// A client that populated nothing implies an empty mask: an update
+			// that writes nothing, never one that overwrites every field.
+			Expect(aip.IsFullReplacement(aip.ImpliedUpdateMask(&testpb.Shipment{}))).To(BeFalse())
+		})
+	})
+
+	Describe("MutablePaths", func() {
+		It("names every writable field, in declaration order", func() {
+			// name is IDENTIFIER, create_time OUTPUT_ONLY, carrier_code IMMUTABLE.
+			desc := (&testpb.Shipment{}).ProtoReflect().Descriptor()
+			Expect(aip.MutablePaths(desc)).To(Equal([]string{
+				"origin", "destination", "notes", "carrier", "line_items",
+				"keyed_items", "insured", "fragile", "labels",
+			}))
+		})
+
+		It("leaves out an OUTPUT_ONLY field of a nested message's own", func() {
+			desc := (&testpb.Carrier{}).ProtoReflect().Descriptor()
+			Expect(aip.MutablePaths(desc)).To(Equal([]string{"name"}))
+		})
+
+		It("contains every path ImpliedUpdateMask can return", func() {
+			shipment := &testpb.Shipment{
+				Name: "shipments/1", Origin: "Berlin", Destination: "Paris",
+				CreateTime: timestamppb.Now(), Notes: "n", CarrierCode: "DHL",
+				Carrier:    &testpb.Carrier{Name: "DHL"},
+				LineItems:  []*testpb.LineItem{{Sku: "a"}},
+				KeyedItems: map[string]*testpb.LineItem{"k": {Sku: "b"}},
+				Insured:    true, Fragile: proto.Bool(false), Labels: []string{"x"},
+			}
+			Expect(aip.ImpliedUpdateMask(shipment).GetPaths()).To(Equal(
+				aip.MutablePaths(shipment.ProtoReflect().Descriptor())))
+		})
+
+		It("returns nil for a nil descriptor", func() {
+			Expect(aip.MutablePaths(nil)).To(BeNil())
+		})
 	})
 
 	Describe("ImpliedUpdateMask", func() {
@@ -76,6 +116,16 @@ var _ = Describe("FieldMask", func() {
 			mask = aip.ImpliedUpdateMask(shipment)
 			Expect(mask).NotTo(BeNil())
 			Expect(mask.GetPaths()).To(BeEmpty())
+		})
+
+		It("implies a populated message as one path, so OUTPUT_ONLY beneath it is cleared first", func() {
+			// carrier is implied whole; its tracking_id is OUTPUT_ONLY and would
+			// be written with it. Clear, then imply.
+			shipment := &testpb.Shipment{Carrier: &testpb.Carrier{Name: "DHL", TrackingId: "t1"}}
+			aip.ClearFields(shipment, aip.OutputOnly)
+			Expect(aip.ImpliedUpdateMask(shipment).GetPaths()).To(Equal([]string{"carrier"}))
+			Expect(shipment.GetCarrier().GetTrackingId()).To(BeEmpty())
+			Expect(shipment.GetCarrier().GetName()).To(Equal("DHL"))
 		})
 
 		It("does not modify the resource", func() {

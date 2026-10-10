@@ -21,7 +21,7 @@ concept, not by a package path.
 | [122](https://google.aip.dev/122) | resource names | ✅ runtime only |
 | [132](https://google.aip.dev/132#ordering) | `order_by` | not here — query layer |
 | [158](https://google.aip.dev/158) | `page_token` / `page_size` | not here — query layer |
-| [134](https://google.aip.dev/134) | full replacement, implied mask | ✅ |
+| [134](https://google.aip.dev/134) | `*` expansion, implied mask | ✅ |
 | [134](https://google.aip.dev/134) | `update_mask` validation | not here — protovalidate `field_mask.in` |
 | [203](https://google.aip.dev/203) | field behavior: clearing, copying | ✅ |
 | [203](https://google.aip.dev/203) | `REQUIRED` validation | not here — protovalidate `required` |
@@ -49,33 +49,51 @@ behaviors are re-exported, so no `genproto/annotations` import:
 aip.ClearFields(request.GetShipment(), aip.OutputOnly)
 ```
 
-`IsFullReplacement` says whether an update asks for the whole resource — an
-absent or empty mask, or `"*"` — so the server can expand it to every writable
-field:
+AIP-134 gives an update mask two shorthands, and a server expands each:
 
-```go
-if aip.IsFullReplacement(request.GetUpdateMask()) {
-        // write every field the caller may set
-}
-```
+- **`"*"`** is full replacement: every field an update may write — not
+  `OUTPUT_ONLY`, `IDENTIFIER` or `IMMUTABLE`. `IsFullReplacement` recognises it
+  and `MutablePaths` lists the fields:
 
-`ImpliedUpdateMask` is the mask AIP-134 implies when a client omits one: every
-top-level field an update may write — not `OUTPUT_ONLY`, `IDENTIFIER` or
-`IMMUTABLE` — that is populated on the resource, in declaration order. It only
-reads the resource. A request's `SetDefaults` fills an omitted mask with it:
+  ```go
+  if aip.IsFullReplacement(x.GetUpdateMask()) {
+          x.UpdateMask = &fieldmaskpb.FieldMask{
+                  Paths: aip.MutablePaths(x.GetCollection().ProtoReflect().Descriptor()),
+          }
+  }
+  ```
 
-```go
-func (x *UpdateCollectionRequest) SetDefaults() {
-        if len(x.GetUpdateMask().GetPaths()) == 0 {
-                x.UpdateMask = aip.ImpliedUpdateMask(x.GetCollection())
-        }
-}
-```
+- **An omitted mask** is the *implied* mask: every writable top-level field
+  that is populated on the resource, in declaration order. `ImpliedUpdateMask`
+  computes it, reading the resource only. A request's `SetDefaults` fills an
+  omitted mask with it — clearing first:
+
+  ```go
+  func (x *UpdateCollectionRequest) SetDefaults() {
+          if len(x.GetUpdateMask().GetPaths()) == 0 {
+                  aip.ClearFields(x.GetCollection(), aip.OutputOnly)
+                  x.UpdateMask = aip.ImpliedUpdateMask(x.GetCollection())
+          }
+  }
+  ```
+
+An empty mask is **not** full replacement. A client that populated nothing
+implies an empty mask — an update that writes nothing — and reading that as
+`"*"` would overwrite every writable field with its zero value.
 
 Populated is protobuf presence: a plain scalar counts when non-zero, an
 `optional` one when set — even to zero — a message when set, a repeated field
-or map when non-empty. The result is never nil; a resource with nothing
-writable populated gives an empty mask, which reads as full replacement.
+or map when non-empty, a oneof member when it is the one set. Two things follow:
+
+- **Zero values are never implied.** `false`, `0` and `""` on a plain scalar
+  look exactly like unset, so a client clears such a field with an explicit
+  mask — or the schema makes it `optional`.
+- **Clear, then imply.** A populated message is implied as one path, so the
+  update writes everything beneath it, nested `OUTPUT_ONLY` values included.
+  Run `ClearFields(…, aip.OutputOnly)` first, as above.
+
+`MutablePaths` also keeps a hand-written column map honest — a test that every
+writable path has a column fails when a field is added without one.
 
 **Validation is not here, and should not be.** Whether a REQUIRED field is set
 and whether an `update_mask` names real fields are protovalidate's rules —
@@ -85,8 +103,8 @@ disagree with it, reporting differently and needing a handler to remember to
 call it. `ValidateRequiredFields`, `ValidateRequiredFieldsWithMask` and
 `ValidateFieldMask` were removed for that reason, the same line
 [protoc-gen-rust-aip](https://github.com/protoc-contrib/protoc-gen-rust-aip)
-draws. What protovalidate cannot do is *expand* an empty mask, which is why
-`IsFullReplacement` and `ImpliedUpdateMask` are here.
+draws. What protovalidate cannot do is *expand* a mask's shorthands, which is
+why `IsFullReplacement`, `MutablePaths` and `ImpliedUpdateMask` are here.
 
 ## Resource names
 
