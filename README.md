@@ -21,7 +21,7 @@ concept, not by a package path.
 | [122](https://google.aip.dev/122) | resource names | ✅ runtime only |
 | [132](https://google.aip.dev/132#ordering) | `order_by` | not here — query layer |
 | [158](https://google.aip.dev/158) | `page_token` / `page_size` | not here — query layer |
-| [134](https://google.aip.dev/134) | full replacement | ✅ |
+| [134](https://google.aip.dev/134) | full replacement, implied mask | ✅ |
 | [134](https://google.aip.dev/134) | `update_mask` validation | not here — protovalidate `field_mask.in` |
 | [203](https://google.aip.dev/203) | field behavior: clearing, copying | ✅ |
 | [203](https://google.aip.dev/203) | `REQUIRED` validation | not here — protovalidate `required` |
@@ -59,6 +59,24 @@ if aip.IsFullReplacement(request.GetUpdateMask()) {
 }
 ```
 
+`ImpliedUpdateMask` is the mask AIP-134 implies when a client omits one: every
+top-level field an update may write — not `OUTPUT_ONLY`, `IDENTIFIER` or
+`IMMUTABLE` — that is populated on the resource, in declaration order. It only
+reads the resource. A request's `SetDefaults` fills an omitted mask with it:
+
+```go
+func (x *UpdateCollectionRequest) SetDefaults() {
+        if len(x.GetUpdateMask().GetPaths()) == 0 {
+                x.UpdateMask = aip.ImpliedUpdateMask(x.GetCollection())
+        }
+}
+```
+
+Populated is protobuf presence: a plain scalar counts when non-zero, an
+`optional` one when set — even to zero — a message when set, a repeated field
+or map when non-empty. The result is never nil; a resource with nothing
+writable populated gives an empty mask, which reads as full replacement.
+
 **Validation is not here, and should not be.** Whether a REQUIRED field is set
 and whether an `update_mask` names real fields are protovalidate's rules —
 `(buf.validate.field).required` or `min_len`, and `field_mask.in` — which a
@@ -68,7 +86,7 @@ call it. `ValidateRequiredFields`, `ValidateRequiredFieldsWithMask` and
 `ValidateFieldMask` were removed for that reason, the same line
 [protoc-gen-rust-aip](https://github.com/protoc-contrib/protoc-gen-rust-aip)
 draws. What protovalidate cannot do is *expand* an empty mask, which is why
-`IsFullReplacement` stays.
+`IsFullReplacement` and `ImpliedUpdateMask` are here.
 
 ## Resource names
 

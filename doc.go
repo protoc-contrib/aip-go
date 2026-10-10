@@ -8,7 +8,7 @@
 // The AIPs implemented here:
 //
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
-//   - AIP-134 field masks — [IsFullReplacement]
+//   - AIP-134 field masks — [IsFullReplacement], [ImpliedUpdateMask]
 //   - AIP-203 field behavior — [ClearFields], [CopyFields]
 //
 // Validation is deliberately absent too. Whether a REQUIRED field is set and
