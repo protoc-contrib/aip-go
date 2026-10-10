@@ -11,7 +11,7 @@ import "github.com/protoc-contrib/aip-go"
 ```
 
 Everything is one package, so a handler reads as `aip.ClearFields`,
-`aip.ValidateFieldMask`, `aip.ResourcePattern` — names are prefixed by the AIP
+`aip.IsFullReplacement`, `aip.ResourcePattern` — names are prefixed by the AIP
 concept, not by a package path.
 
 ## Status
@@ -21,8 +21,10 @@ concept, not by a package path.
 | [122](https://google.aip.dev/122) | resource names | ✅ runtime only |
 | [132](https://google.aip.dev/132#ordering) | `order_by` | not here — query layer |
 | [158](https://google.aip.dev/158) | `page_token` / `page_size` | not here — query layer |
-| [134](https://google.aip.dev/134) | `update_mask` validation | ✅ |
-| [203](https://google.aip.dev/203) | field behavior | ✅ |
+| [134](https://google.aip.dev/134) | full replacement | ✅ |
+| [134](https://google.aip.dev/134) | `update_mask` validation | not here — protovalidate `field_mask.in` |
+| [203](https://google.aip.dev/203) | field behavior: clearing, copying | ✅ |
+| [203](https://google.aip.dev/203) | `REQUIRED` validation | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 
 ## Ordering, pagination and filtering
@@ -40,34 +42,33 @@ returns a `*cel.Ast`, which a query layer such as
 ## Field behavior and field masks
 
 `ClearFields` drops the values a client should not be setting, rather than
-rejecting the request outright; `ValidateRequiredFields` then checks what is
-left. The behaviors are re-exported, so no `genproto/annotations` import:
+rejecting the request outright, and `CopyFields` restores the server's own. The
+behaviors are re-exported, so no `genproto/annotations` import:
 
 ```go
 aip.ClearFields(request.GetShipment(), aip.OutputOnly)
-if err := aip.ValidateRequiredFields(request.GetShipment()); err != nil {
-        return nil, connect.NewError(connect.CodeInvalidArgument, err)
-}
 ```
 
-For a partial update, validate against the mask instead. Coverage is by
-prefix, so a mask of `["carrier"]` also validates the required fields nested
-beneath `carrier` — replacing a subtree means the whole subtree must be valid:
+`IsFullReplacement` says whether an update asks for the whole resource — an
+absent or empty mask, or `"*"` — so the server can expand it to every writable
+field:
 
 ```go
-if err := aip.ValidateFieldMask(request.GetUpdateMask(), request.GetShipment()); err != nil {
-        return nil, connect.NewError(connect.CodeInvalidArgument, err)
-}
-if err := aip.ValidateRequiredFieldsWithMask(request.GetShipment(), request.GetUpdateMask()); err != nil {
-        return nil, connect.NewError(connect.CodeInvalidArgument, err)
+if aip.IsFullReplacement(request.GetUpdateMask()) {
+        // write every field the caller may set
 }
 ```
 
-A field with explicit presence — a message, an `optional` scalar, a oneof
-member — is judged by presence, so an explicit `false` satisfies a REQUIRED
-`optional bool`. A presence-less proto3 scalar has no way to distinguish unset
-from zero, so a REQUIRED one must be non-zero; declare it `optional` if zero
-is a legitimate value.
+**Validation is not here, and should not be.** Whether a REQUIRED field is set
+and whether an `update_mask` names real fields are protovalidate's rules —
+`(buf.validate.field).required` or `min_len`, and `field_mask.in` — which a
+server already runs on every request. A second implementation here could only
+disagree with it, reporting differently and needing a handler to remember to
+call it. `ValidateRequiredFields`, `ValidateRequiredFieldsWithMask` and
+`ValidateFieldMask` were removed for that reason, the same line
+[protoc-gen-rust-aip](https://github.com/protoc-contrib/protoc-gen-rust-aip)
+draws. What protovalidate cannot do is *expand* an empty mask, which is why
+`IsFullReplacement` stays.
 
 ## Resource names
 

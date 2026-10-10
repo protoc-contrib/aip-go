@@ -1,13 +1,11 @@
 package aip
 
 import (
-	"errors"
 	"fmt"
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 // FieldBehavior is the documented behavior of a field, as declared by the
@@ -36,11 +34,6 @@ const (
 	// Identifier marks the field holding the resource name.
 	Identifier = annotations.FieldBehavior_IDENTIFIER
 )
-
-// ErrMissingRequiredField is returned by [ValidateRequiredFields] when a field
-// annotated REQUIRED has no value. Map it to InvalidArgument at the RPC
-// boundary.
-var ErrMissingRequiredField = errors.New("missing required field")
 
 // FieldBehaviors returns the behaviors annotated on field.
 func FieldBehaviors(field protoreflect.FieldDescriptor) []FieldBehavior {
@@ -124,77 +117,6 @@ func CopyFields(dst, src proto.Message, behaviors ...FieldBehavior) error {
 		}
 	}
 	return nil
-}
-
-// ValidateRequiredFields returns [ErrMissingRequiredField] if any field
-// annotated REQUIRED — at any depth — has no value.
-//
-// A field without explicit presence cannot distinguish "unset" from "set to
-// the zero value", so a REQUIRED proto3 scalar must be non-zero to count as
-// present: a required `bool` can never be false. Declare it `optional` if
-// false is a legitimate value.
-//
-// See: https://google.aip.dev/203.
-func ValidateRequiredFields(message proto.Message) error {
-	return validateRequiredFields(message.ProtoReflect(), nil, "")
-}
-
-// ValidateRequiredFieldsWithMask is [ValidateRequiredFields] restricted to the
-// fields named by mask, for validating a partial update (AIP-134).
-//
-// Matching is by prefix, so a mask of ["shipment"] validates the required
-// fields nested beneath `shipment` as well as `shipment` itself — replacing a
-// subtree wholesale means the whole subtree has to be valid. A nil or empty
-// mask validates nothing, since a request that names no paths updates nothing.
-func ValidateRequiredFieldsWithMask(message proto.Message, mask *fieldmaskpb.FieldMask) error {
-	if len(mask.GetPaths()) == 0 {
-		return nil
-	}
-	return validateRequiredFields(message.ProtoReflect(), mask, "")
-}
-
-func validateRequiredFields(message protoreflect.Message, mask *fieldmaskpb.FieldMask, prefix string) error {
-	fields := message.Descriptor().Fields()
-	for i := range fields.Len() {
-		field := fields.Get(i)
-		path := string(field.Name())
-		if prefix != "" {
-			path = prefix + "." + path
-		}
-		if !isFieldPopulated(message, field) {
-			if HasFieldBehavior(field, Required) && maskCovers(mask, path) {
-				return fmt.Errorf("%w: %s", ErrMissingRequiredField, path)
-			}
-			continue
-		}
-		var err error
-		rangeMessages(field, message.Get(field), func(nested protoreflect.Message) {
-			if err == nil {
-				err = validateRequiredFields(nested, mask, path)
-			}
-		})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// maskCovers reports whether path is named by mask, either exactly or as a
-// descendant of one of its paths. A nil mask covers everything.
-func maskCovers(mask *fieldmaskpb.FieldMask, path string) bool {
-	if len(mask.GetPaths()) == 0 {
-		return true
-	}
-	for _, masked := range mask.GetPaths() {
-		if masked == FieldMaskWildcard || masked == path {
-			return true
-		}
-		if len(masked) < len(path) && path[:len(masked)] == masked && path[len(masked)] == '.' {
-			return true
-		}
-	}
-	return false
 }
 
 // rangeMessages invokes fn for every message reachable through field, whether
