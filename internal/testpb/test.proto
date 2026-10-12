@@ -59,8 +59,8 @@ message UpdateShipmentRequest {
 }
 
 // Book is a resource (google.api.resource) for the request-level helpers:
-// MissingRequiredRequestPaths and ImplyUpdateMask recognise the AIP standard
-// method requests below by the resource-typed field they carry.
+// ValidateRequired, ImplyResourceName and ImplyUpdateMask recognise the AIP
+// standard method requests below by the resource-typed field they carry.
 message Book {
   option (google.api.resource) = {
     type: "tests.example.com/Book"
@@ -104,4 +104,32 @@ message BatchUpdateBooksRequest {
 // GetBookRequest is no write: the request-level helpers ignore it.
 message GetBookRequest {
   string name = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Chapter is a resource under a Book: its name is built from the create
+// request's parent, which ImplyResourceName also copies onto it.
+message Chapter {
+  option (google.api.resource) = {
+    type: "tests.example.com/Chapter"
+    pattern: "books/{book}/chapters/{chapter}"
+    singular: "chapter"
+    plural: "chapters"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string parent = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string title = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// CreateChapterRequest is an AIP-133 create of a nested resource.
+message CreateChapterRequest {
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+  string chapter_id = 2 [(google.api.field_behavior) = OPTIONAL];
+  Chapter chapter = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// ImportBookRequest carries a Book with no `book_id`: a create the server
+// names some other way, which ImplyResourceName leaves alone.
+message ImportBookRequest {
+  Book book = 1 [(google.api.field_behavior) = REQUIRED];
 }

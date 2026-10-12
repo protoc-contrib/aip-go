@@ -21,11 +21,12 @@ concept, not by a package path.
 | [122](https://google.aip.dev/122) | resource names | ✅ runtime only |
 | [132](https://google.aip.dev/132#ordering) | `order_by` | not here — query layer |
 | [158](https://google.aip.dev/158) | `page_token` / `page_size` | not here — query layer |
+| [133](https://google.aip.dev/133#user-specified-ids) | a create's omitted id, its resource's name | ✅ `ImplyResourceName` |
 | [134](https://google.aip.dev/134) | `*` expansion, implied mask | ✅ `MutablePaths`, `ImpliedUpdateMask`, `ImplyUpdateMask` |
 | [134](https://google.aip.dev/134) | `update_mask` validation | not here — protovalidate `field_mask.in` |
 | [203](https://google.aip.dev/203) | field behavior: clearing, copying | ✅ |
-| [203](https://google.aip.dev/203#immutable) | refusing a changed `IMMUTABLE` value | ✅ `ChangedImmutablePaths` |
-| [203](https://google.aip.dev/203#required) | `REQUIRED` on a resource's fields, per create or update | ✅ `MissingRequiredPaths`, `MissingRequiredRequestPaths` |
+| [203](https://google.aip.dev/203#immutable) | refusing a changed `IMMUTABLE` value | ✅ `ValidateImmutable` |
+| [203](https://google.aip.dev/203#required) | `REQUIRED` on a resource's fields, per create or update | ✅ `ValidateRequiredFields`, `ValidateRequired` |
 | [203](https://google.aip.dev/203#required) | `REQUIRED` on a request's own fields | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 
@@ -100,33 +101,33 @@ writable path has a column fails when a field is added without one.
 **A changed `IMMUTABLE` value is refused, not dropped.** Neither the implied
 mask nor `*` includes an `IMMUTABLE` field, so on their own they would discard a
 new value without a word. AIP-203 has the service reject it instead;
-`ChangedImmutablePaths` names the fields an update changes against the stored
-resource — an echoed-back value is not a change, and an unset field is not part
+`ValidateImmutable` names the fields an update changes against the stored
+resource, in an `*aip.ImmutableError` — an echoed-back value is not a change, and an unset field is not part
 of the request. A list that is also `UNORDERED_LIST` is compared without regard
 to order, since the service may have reordered it:
 
 ```go
 stored, err := repository.Get(ctx, name)
 // ...
-if changed := aip.ChangedImmutablePaths(stored, req.GetCollection()); len(changed) > 0 {
-	return status.Errorf(codes.InvalidArgument, "immutable fields cannot change: %v", changed)
+if err := aip.ValidateImmutable(stored, req.GetCollection()); err != nil {
+	return status.Error(codes.InvalidArgument, err.Error()) // "immutable fields cannot change: sku"
 }
 ```
 
 **`REQUIRED` depends on the method.** AIP-203 has a create set every `REQUIRED`
 field, while a partial update may omit one its mask does not name — but must set
-one it names, or the update would clear it. `MissingRequiredPaths` answers both:
+one it names, or the update would clear it. `ValidateRequiredFields` answers both:
 a nil mask is a create, any other mask an update. A set nested message is
 checked in turn, since its annotations are independent of its parent's; an
 unset one is not:
 
 ```go
 // create
-missing := aip.MissingRequiredPaths(req.GetCollection(), nil)
+err := aip.ValidateRequiredFields(req.GetCollection(), nil)
 // update, after an omitted mask is implied and "*" expanded
-missing := aip.MissingRequiredPaths(req.GetCollection(), req.GetUpdateMask())
-if len(missing) > 0 {
-	return status.Errorf(codes.InvalidArgument, "required fields are missing: %v", missing)
+err := aip.ValidateRequiredFields(req.GetCollection(), req.GetUpdateMask())
+if err != nil {
+	return status.Error(codes.InvalidArgument, err.Error()) // "required fields are unset: display_name"
 }
 ```
 
@@ -135,11 +136,14 @@ Unset is protobuf presence, as for the implied mask: an explicit `false` on an
 
 **Whole requests, not just resources.** Which resource a request writes, and
 whether it is a create or an update, are AIP conventions too, so a server need
-not restate them per request. `MissingRequiredRequestPaths` and
-`ImplyUpdateMask` take the request itself and recognise:
+not restate them per request. `ValidateRequired`, `ImplyResourceName`,
+`ImplyUpdateMask` and `ImplyRequest`, which runs both implications, take the
+request itself and recognise:
 
 - **a create** (AIP-133): the resource is the singular field whose message type
-  declares `google.api.resource`; every `REQUIRED` field is checked;
+  declares `google.api.resource`; every `REQUIRED` field is checked, and an
+  omitted `<resource>_id` is assigned with the caller's `newID` and the
+  resource named from its pattern and the request's `parent`;
 - **an update** (AIP-134): the request's type also has an `update_mask`
   `google.protobuf.FieldMask` field; only the fields the mask names are
   checked. The schema decides, never the value: an unset mask names nothing,
@@ -152,16 +156,21 @@ order:
 
 ```go
 aip.ClearFields(req, aip.OutputOnly) // server-owned values never reach the mask
-aip.ImplyUpdateMask(req)             // an omitted or empty mask becomes the implied one
-for _, path := range aip.MissingRequiredRequestPaths(req) {
-	// path.String(): "(acme.v1.BatchCreateBooksRequest).requests[1].book.title"
+aip.ImplyRequest(req, newID)         // a create's id and name, an omitted or empty mask
+err := aip.ValidateRequired(req)     // "required fields are unset: requests[1].book.title"
+
+var required *aip.RequiredError
+if errors.As(err, &required) {
+	for _, path := range required.Paths {
+		// path.String(): "(acme.v1.BatchCreateBooksRequest).requests[1].book.title"
+	}
 }
 ```
 
-`MissingRequiredRequestPaths` returns `protopath.Path`s rather than strings, so
-a batch entry's index survives and a caller can build a protovalidate field path
-from the steps. Both functions read the request through reflection, so a
-`dynamicpb` message works as a generated one does.
+The errors hold `protopath.Path`s rather than strings, so a batch entry's index
+survives and a caller can build a protovalidate field path from the steps. The
+functions read the request through reflection, so a `dynamicpb` message works as
+a generated one does.
 
 **Stricter than AIP-161, on purpose.** AIP-161 has a mask that names an
 `OUTPUT_ONLY` field ignored. Here `field_mask.in` lists only the writable
@@ -179,10 +188,10 @@ an update. A resource message is shared by both requests, so a rule on its
 field applies to both, and `REQUIRED` means something different in each. The
 workaround was a CEL rule per field per request — `this.display_name != ''` on
 create, `!('display_name' in this.update_mask.paths) || …` on update — restating
-`google.api.field_behavior` in strings no lint can check. `MissingRequiredPaths`
+`google.api.field_behavior` in strings no lint can check. `ValidateRequiredFields`
 reads the annotation instead, so a resource field marked `REQUIRED` carries no
 `buf.validate` `required` of its own. This reverses the line this package drew
-when it removed `ValidateRequiredFields` and `ValidateRequiredFieldsWithMask`:
+when it removed the old `ValidateRequiredFields` and `ValidateRequiredFieldsWithMask`:
 with the CEL rules gone there is no second implementation for it to disagree
 with. Nor can protovalidate *expand* a mask's shorthands, which is why
 `IsFullReplacement`, `MutablePaths` and `ImpliedUpdateMask` are here.

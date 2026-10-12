@@ -355,8 +355,8 @@ func (x *UpdateShipmentRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 }
 
 // Book is a resource (google.api.resource) for the request-level helpers:
-// MissingRequiredRequestPaths and ImplyUpdateMask recognise the AIP standard
-// method requests below by the resource-typed field they carry.
+// ValidateRequired, ImplyResourceName and ImplyUpdateMask recognise the AIP
+// standard method requests below by the resource-typed field they carry.
 type Book struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -698,6 +698,175 @@ func (x *GetBookRequest) GetName() string {
 	return ""
 }
 
+// Chapter is a resource under a Book: its name is built from the create
+// request's parent, which ImplyResourceName also copies onto it.
+type Chapter struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Parent        string                 `protobuf:"bytes,2,opt,name=parent,proto3" json:"parent,omitempty"`
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Chapter) Reset() {
+	*x = Chapter{}
+	mi := &file_internal_testpb_test_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Chapter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Chapter) ProtoMessage() {}
+
+func (x *Chapter) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Chapter.ProtoReflect.Descriptor instead.
+func (*Chapter) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Chapter) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Chapter) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *Chapter) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+// CreateChapterRequest is an AIP-133 create of a nested resource.
+type CreateChapterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	ChapterId     string                 `protobuf:"bytes,2,opt,name=chapter_id,json=chapterId,proto3" json:"chapter_id,omitempty"`
+	Chapter       *Chapter               `protobuf:"bytes,3,opt,name=chapter,proto3" json:"chapter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateChapterRequest) Reset() {
+	*x = CreateChapterRequest{}
+	mi := &file_internal_testpb_test_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateChapterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateChapterRequest) ProtoMessage() {}
+
+func (x *CreateChapterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateChapterRequest.ProtoReflect.Descriptor instead.
+func (*CreateChapterRequest) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CreateChapterRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *CreateChapterRequest) GetChapterId() string {
+	if x != nil {
+		return x.ChapterId
+	}
+	return ""
+}
+
+func (x *CreateChapterRequest) GetChapter() *Chapter {
+	if x != nil {
+		return x.Chapter
+	}
+	return nil
+}
+
+// ImportBookRequest carries a Book with no `book_id`: a create the server
+// names some other way, which ImplyResourceName leaves alone.
+type ImportBookRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Book          *Book                  `protobuf:"bytes,1,opt,name=book,proto3" json:"book,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportBookRequest) Reset() {
+	*x = ImportBookRequest{}
+	mi := &file_internal_testpb_test_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportBookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportBookRequest) ProtoMessage() {}
+
+func (x *ImportBookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportBookRequest.ProtoReflect.Descriptor instead.
+func (*ImportBookRequest) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ImportBookRequest) GetBook() *Book {
+	if x != nil {
+		return x.Book
+	}
+	return nil
+}
+
 var File_internal_testpb_test_proto protoreflect.FileDescriptor
 
 const file_internal_testpb_test_proto_rawDesc = "" +
@@ -762,7 +931,19 @@ const file_internal_testpb_test_proto_rawDesc = "" +
 	"\x06parent\x18\x01 \x01(\tB\x03\xe0A\x02R\x06parent\x129\n" +
 	"\brequests\x18\x02 \x03(\v2\x18.tests.UpdateBookRequestB\x03\xe0A\x02R\brequests\")\n" +
 	"\x0eGetBookRequest\x12\x17\n" +
-	"\x04name\x18\x01 \x01(\tB\x03\xe0A\x02R\x04nameB2Z0github.com/protoc-contrib/aip-go/internal/testpbb\x06proto3"
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\x02R\x04name\"\xae\x01\n" +
+	"\aChapter\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
+	"\x06parent\x18\x02 \x01(\tB\x03\xe0A\x03R\x06parent\x12\x19\n" +
+	"\x05title\x18\x03 \x01(\tB\x03\xe0A\x02R\x05title:R\xeaAO\n" +
+	"\x19tests.example.com/Chapter\x12\x1fbooks/{book}/chapters/{chapter}*\bchapters2\achapter\"\x86\x01\n" +
+	"\x14CreateChapterRequest\x12\x1b\n" +
+	"\x06parent\x18\x01 \x01(\tB\x03\xe0A\x02R\x06parent\x12\"\n" +
+	"\n" +
+	"chapter_id\x18\x02 \x01(\tB\x03\xe0A\x01R\tchapterId\x12-\n" +
+	"\achapter\x18\x03 \x01(\v2\x0e.tests.ChapterB\x03\xe0A\x02R\achapter\"9\n" +
+	"\x11ImportBookRequest\x12$\n" +
+	"\x04book\x18\x01 \x01(\v2\v.tests.BookB\x03\xe0A\x02R\x04bookB2Z0github.com/protoc-contrib/aip-go/internal/testpbb\x06proto3"
 
 var (
 	file_internal_testpb_test_proto_rawDescOnce sync.Once
@@ -776,7 +957,7 @@ func file_internal_testpb_test_proto_rawDescGZIP() []byte {
 	return file_internal_testpb_test_proto_rawDescData
 }
 
-var file_internal_testpb_test_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_internal_testpb_test_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_internal_testpb_test_proto_goTypes = []any{
 	(*Shipment)(nil),                // 0: tests.Shipment
 	(*Carrier)(nil),                 // 1: tests.Carrier
@@ -788,31 +969,36 @@ var file_internal_testpb_test_proto_goTypes = []any{
 	(*BatchCreateBooksRequest)(nil), // 7: tests.BatchCreateBooksRequest
 	(*BatchUpdateBooksRequest)(nil), // 8: tests.BatchUpdateBooksRequest
 	(*GetBookRequest)(nil),          // 9: tests.GetBookRequest
-	nil,                             // 10: tests.Shipment.KeyedItemsEntry
-	(*timestamppb.Timestamp)(nil),   // 11: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),   // 12: google.protobuf.FieldMask
+	(*Chapter)(nil),                 // 10: tests.Chapter
+	(*CreateChapterRequest)(nil),    // 11: tests.CreateChapterRequest
+	(*ImportBookRequest)(nil),       // 12: tests.ImportBookRequest
+	nil,                             // 13: tests.Shipment.KeyedItemsEntry
+	(*timestamppb.Timestamp)(nil),   // 14: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),   // 15: google.protobuf.FieldMask
 }
 var file_internal_testpb_test_proto_depIdxs = []int32{
-	11, // 0: tests.Shipment.create_time:type_name -> google.protobuf.Timestamp
+	14, // 0: tests.Shipment.create_time:type_name -> google.protobuf.Timestamp
 	1,  // 1: tests.Shipment.carrier:type_name -> tests.Carrier
 	2,  // 2: tests.Shipment.line_items:type_name -> tests.LineItem
-	10, // 3: tests.Shipment.keyed_items:type_name -> tests.Shipment.KeyedItemsEntry
+	13, // 3: tests.Shipment.keyed_items:type_name -> tests.Shipment.KeyedItemsEntry
 	1,  // 4: tests.Shipment.origin_carrier:type_name -> tests.Carrier
 	1,  // 5: tests.Shipment.escorts:type_name -> tests.Carrier
 	0,  // 6: tests.UpdateShipmentRequest.shipment:type_name -> tests.Shipment
-	12, // 7: tests.UpdateShipmentRequest.update_mask:type_name -> google.protobuf.FieldMask
+	15, // 7: tests.UpdateShipmentRequest.update_mask:type_name -> google.protobuf.FieldMask
 	1,  // 8: tests.Book.courier:type_name -> tests.Carrier
 	4,  // 9: tests.CreateBookRequest.book:type_name -> tests.Book
 	4,  // 10: tests.UpdateBookRequest.book:type_name -> tests.Book
-	12, // 11: tests.UpdateBookRequest.update_mask:type_name -> google.protobuf.FieldMask
+	15, // 11: tests.UpdateBookRequest.update_mask:type_name -> google.protobuf.FieldMask
 	5,  // 12: tests.BatchCreateBooksRequest.requests:type_name -> tests.CreateBookRequest
 	6,  // 13: tests.BatchUpdateBooksRequest.requests:type_name -> tests.UpdateBookRequest
-	2,  // 14: tests.Shipment.KeyedItemsEntry.value:type_name -> tests.LineItem
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	10, // 14: tests.CreateChapterRequest.chapter:type_name -> tests.Chapter
+	4,  // 15: tests.ImportBookRequest.book:type_name -> tests.Book
+	2,  // 16: tests.Shipment.KeyedItemsEntry.value:type_name -> tests.LineItem
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_internal_testpb_test_proto_init() }
@@ -827,7 +1013,7 @@ func file_internal_testpb_test_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_testpb_test_proto_rawDesc), len(file_internal_testpb_test_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
