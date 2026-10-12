@@ -10,8 +10,9 @@
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
 //   - AIP-134 field masks — [IsFullReplacement] and [MutablePaths] for "*",
 //     [ImpliedUpdateMask] for an omitted mask
-//   - AIP-203 field behavior — [ClearFields], [CopyFields], and
-//     [ImmutableChanges] to refuse a changed IMMUTABLE value
+//   - AIP-203 field behavior — [ClearFields], [CopyFields],
+//     [MissingRequiredPaths] to enforce REQUIRED on a create or an update, and
+//     [ChangedImmutablePaths] to refuse a changed IMMUTABLE value
 //
 // This stack is deliberately stricter than AIP-161 about update masks. AIP-161
 // has a mask that names an OUTPUT_ONLY field ignored; here protovalidate's
@@ -19,12 +20,16 @@
 // with InvalidArgument — a clearer answer than a silent no-op, and one that
 // protoc-gen-aip-lint's update-mask-writable-fields rule keeps in step with
 // `google.api.field_behavior`. A changed IMMUTABLE value is an error too
-// ([ImmutableChanges]), rather than dropped by the implied mask or by "*".
+// ([ChangedImmutablePaths]), rather than dropped by the implied mask or by "*".
 //
-// Validation is deliberately absent too. Whether a REQUIRED field is set and
-// whether an update_mask names real fields are protovalidate's rules —
-// `required` or `min_len`, and `field_mask.in` — which a server already runs;
-// a second implementation here could only disagree with it.
+// Validation is split with protovalidate. A request's own fields — `parent`,
+// the resource field itself — every value's format, and whether an
+// update_mask names real fields stay protovalidate's rules: `required`,
+// `min_len`, `field_mask.in`. REQUIRED on a resource's own fields is
+// [MissingRequiredPaths]'s: a resource message is shared by its create and
+// update requests, a create must set every REQUIRED field while an update need
+// only set the ones its mask names, and protovalidate cannot tell which method
+// it is validating. Per-request CEL rules were the workaround this replaces.
 //
 // Ordering (AIP-132), pagination (AIP-158) and filtering (AIP-160) are
 // deliberately absent. A page token or cursor is only meaningful against the

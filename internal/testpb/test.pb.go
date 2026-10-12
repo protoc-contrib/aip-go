@@ -44,9 +44,14 @@ type Shipment struct {
 	// An explicit-presence required bool: `false` is a real value.
 	Fragile *bool    `protobuf:"varint,11,opt,name=fragile,proto3,oneof" json:"fragile,omitempty"`
 	Labels  []string `protobuf:"bytes,12,rep,name=labels,proto3" json:"labels,omitempty"`
-	// IMMUTABLE fields of a message and a repeated shape, for ImmutableChanges.
+	// IMMUTABLE fields of a message and a repeated shape, for
+	// ChangedImmutablePaths. `route` is ordered: another order is a change.
 	OriginCarrier *Carrier `protobuf:"bytes,13,opt,name=origin_carrier,json=originCarrier,proto3" json:"origin_carrier,omitempty"`
 	Route         []string `protobuf:"bytes,14,rep,name=route,proto3" json:"route,omitempty"`
+	// IMMUTABLE and UNORDERED_LIST: the same elements in another order are not a
+	// change.
+	Stops         []string   `protobuf:"bytes,15,rep,name=stops,proto3" json:"stops,omitempty"`
+	Escorts       []*Carrier `protobuf:"bytes,16,rep,name=escorts,proto3" json:"escorts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -175,6 +180,20 @@ func (x *Shipment) GetOriginCarrier() *Carrier {
 func (x *Shipment) GetRoute() []string {
 	if x != nil {
 		return x.Route
+	}
+	return nil
+}
+
+func (x *Shipment) GetStops() []string {
+	if x != nil {
+		return x.Stops
+	}
+	return nil
+}
+
+func (x *Shipment) GetEscorts() []*Carrier {
+	if x != nil {
+		return x.Escorts
 	}
 	return nil
 }
@@ -339,7 +358,7 @@ var File_internal_testpb_test_proto protoreflect.FileDescriptor
 
 const file_internal_testpb_test_proto_rawDesc = "" +
 	"\n" +
-	"\x1ainternal/testpb/test.proto\x12\x05tests\x1a\x1fgoogle/api/field_behavior.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x96\x05\n" +
+	"\x1ainternal/testpb/test.proto\x12\x05tests\x1a\x1fgoogle/api/field_behavior.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x05\n" +
 	"\bShipment\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
 	"\x06origin\x18\x02 \x01(\tB\x03\xe0A\x02R\x06origin\x12%\n" +
@@ -358,7 +377,9 @@ const file_internal_testpb_test_proto_rawDesc = "" +
 	"\afragile\x18\v \x01(\bB\x03\xe0A\x02H\x00R\afragile\x88\x01\x01\x12\x1b\n" +
 	"\x06labels\x18\f \x03(\tB\x03\xe0A\x02R\x06labels\x12:\n" +
 	"\x0eorigin_carrier\x18\r \x01(\v2\x0e.tests.CarrierB\x03\xe0A\x05R\roriginCarrier\x12\x19\n" +
-	"\x05route\x18\x0e \x03(\tB\x03\xe0A\x05R\x05route\x1aN\n" +
+	"\x05route\x18\x0e \x03(\tB\x03\xe0A\x05R\x05route\x12\x1c\n" +
+	"\x05stops\x18\x0f \x03(\tB\x06\xe0A\x05\xe0A\x06R\x05stops\x120\n" +
+	"\aescorts\x18\x10 \x03(\v2\x0e.tests.CarrierB\x06\xe0A\x05\xe0A\x06R\aescorts\x1aN\n" +
 	"\x0fKeyedItemsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12%\n" +
 	"\x05value\x18\x02 \x01(\v2\x0f.tests.LineItemR\x05value:\x028\x01B\n" +
@@ -404,14 +425,15 @@ var file_internal_testpb_test_proto_depIdxs = []int32{
 	2, // 2: tests.Shipment.line_items:type_name -> tests.LineItem
 	4, // 3: tests.Shipment.keyed_items:type_name -> tests.Shipment.KeyedItemsEntry
 	1, // 4: tests.Shipment.origin_carrier:type_name -> tests.Carrier
-	0, // 5: tests.UpdateShipmentRequest.shipment:type_name -> tests.Shipment
-	6, // 6: tests.UpdateShipmentRequest.update_mask:type_name -> google.protobuf.FieldMask
-	2, // 7: tests.Shipment.KeyedItemsEntry.value:type_name -> tests.LineItem
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	1, // 5: tests.Shipment.escorts:type_name -> tests.Carrier
+	0, // 6: tests.UpdateShipmentRequest.shipment:type_name -> tests.Shipment
+	6, // 7: tests.UpdateShipmentRequest.update_mask:type_name -> google.protobuf.FieldMask
+	2, // 8: tests.Shipment.KeyedItemsEntry.value:type_name -> tests.LineItem
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_internal_testpb_test_proto_init() }
