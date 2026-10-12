@@ -26,9 +26,20 @@ message Shipment {
   // An explicit-presence required bool: `false` is a real value.
   optional bool fragile = 11 [(google.api.field_behavior) = REQUIRED];
   repeated string labels = 12 [(google.api.field_behavior) = REQUIRED];
-  // IMMUTABLE fields of a message and a repeated shape, for ImmutableChanges.
+  // IMMUTABLE fields of a message and a repeated shape, for
+  // ChangedImmutablePaths. `route` is ordered: another order is a change.
   Carrier origin_carrier = 13 [(google.api.field_behavior) = IMMUTABLE];
   repeated string route = 14 [(google.api.field_behavior) = IMMUTABLE];
+  // IMMUTABLE and UNORDERED_LIST: the same elements in another order are not a
+  // change.
+  repeated string stops = 15 [
+    (google.api.field_behavior) = IMMUTABLE,
+    (google.api.field_behavior) = UNORDERED_LIST
+  ];
+  repeated Carrier escorts = 16 [
+    (google.api.field_behavior) = IMMUTABLE,
+    (google.api.field_behavior) = UNORDERED_LIST
+  ];
 }
 
 message Carrier {

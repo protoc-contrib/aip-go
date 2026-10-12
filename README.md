@@ -24,8 +24,9 @@ concept, not by a package path.
 | [134](https://google.aip.dev/134) | `*` expansion, implied mask | ✅ |
 | [134](https://google.aip.dev/134) | `update_mask` validation | not here — protovalidate `field_mask.in` |
 | [203](https://google.aip.dev/203) | field behavior: clearing, copying | ✅ |
-| [203](https://google.aip.dev/203#immutable) | refusing a changed `IMMUTABLE` value | ✅ `ImmutableChanges` |
-| [203](https://google.aip.dev/203) | `REQUIRED` validation | not here — protovalidate `required` |
+| [203](https://google.aip.dev/203#immutable) | refusing a changed `IMMUTABLE` value | ✅ `ChangedImmutablePaths` |
+| [203](https://google.aip.dev/203#required) | `REQUIRED` on a resource's fields, per create or update | ✅ `MissingRequiredPaths` |
+| [203](https://google.aip.dev/203#required) | `REQUIRED` on a request's own fields | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 
 ## Ordering, pagination and filtering
@@ -99,17 +100,38 @@ writable path has a column fails when a field is added without one.
 **A changed `IMMUTABLE` value is refused, not dropped.** Neither the implied
 mask nor `*` includes an `IMMUTABLE` field, so on their own they would discard a
 new value without a word. AIP-203 has the service reject it instead;
-`ImmutableChanges` names the fields an update changes against the stored
+`ChangedImmutablePaths` names the fields an update changes against the stored
 resource — an echoed-back value is not a change, and an unset field is not part
-of the request:
+of the request. A list that is also `UNORDERED_LIST` is compared without regard
+to order, since the service may have reordered it:
 
 ```go
 stored, err := repository.Get(ctx, name)
 // ...
-if changed := aip.ImmutableChanges(stored, req.GetCollection()); len(changed) > 0 {
+if changed := aip.ChangedImmutablePaths(stored, req.GetCollection()); len(changed) > 0 {
 	return status.Errorf(codes.InvalidArgument, "immutable fields cannot change: %v", changed)
 }
 ```
+
+**`REQUIRED` depends on the method.** AIP-203 has a create set every `REQUIRED`
+field, while a partial update may omit one its mask does not name — but must set
+one it names, or the update would clear it. `MissingRequiredPaths` answers both:
+a nil mask is a create, any other mask an update. A set nested message is
+checked in turn, since its annotations are independent of its parent's; an
+unset one is not:
+
+```go
+// create
+missing := aip.MissingRequiredPaths(req.GetCollection(), nil)
+// update, after an omitted mask is implied and "*" expanded
+missing := aip.MissingRequiredPaths(req.GetCollection(), req.GetUpdateMask())
+if len(missing) > 0 {
+	return status.Errorf(codes.InvalidArgument, "required fields are missing: %v", missing)
+}
+```
+
+Unset is protobuf presence, as for the implied mask: an explicit `false` on an
+`optional bool` is set, and a plain `bool` must be `true`.
 
 **Stricter than AIP-161, on purpose.** AIP-161 has a mask that names an
 `OUTPUT_ONLY` field ignored. Here `field_mask.in` lists only the writable
@@ -119,16 +141,21 @@ paths are dropped. [protoc-gen-aip-lint](https://github.com/protoc-contrib/proto
 `update-mask-writable-fields` rule keeps that list equal to the fields
 `google.api.field_behavior` leaves writable.
 
-**Validation is not here, and should not be.** Whether a REQUIRED field is set
-and whether an `update_mask` names real fields are protovalidate's rules —
-`(buf.validate.field).required` or `min_len`, and `field_mask.in` — which a
-server already runs on every request. A second implementation here could only
-disagree with it, reporting differently and needing a handler to remember to
-call it. `ValidateRequiredFields`, `ValidateRequiredFieldsWithMask` and
-`ValidateFieldMask` were removed for that reason, the same line
-[protoc-gen-rust-aip](https://github.com/protoc-contrib/protoc-gen-rust-aip)
-draws. What protovalidate cannot do is *expand* a mask's shorthands, which is
-why `IsFullReplacement`, `MutablePaths` and `ImpliedUpdateMask` are here.
+**Validation is split with protovalidate.** A request's own fields — `parent`,
+the resource field itself — every value's format, and whether an `update_mask`
+names real fields are protovalidate's rules: `(buf.validate.field).required`,
+`min_len`, `field_mask.in`. What protovalidate cannot do is tell a create from
+an update. A resource message is shared by both requests, so a rule on its
+field applies to both, and `REQUIRED` means something different in each. The
+workaround was a CEL rule per field per request — `this.display_name != ''` on
+create, `!('display_name' in this.update_mask.paths) || …` on update — restating
+`google.api.field_behavior` in strings no lint can check. `MissingRequiredPaths`
+reads the annotation instead, so a resource field marked `REQUIRED` carries no
+`buf.validate` `required` of its own. This reverses the line this package drew
+when it removed `ValidateRequiredFields` and `ValidateRequiredFieldsWithMask`:
+with the CEL rules gone there is no second implementation for it to disagree
+with. Nor can protovalidate *expand* a mask's shorthands, which is why
+`IsFullReplacement`, `MutablePaths` and `ImpliedUpdateMask` are here.
 
 ## Resource names
 
