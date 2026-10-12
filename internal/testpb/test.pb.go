@@ -354,11 +354,355 @@ func (x *UpdateShipmentRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
 	return nil
 }
 
+// Book is a resource (google.api.resource) for the request-level helpers:
+// MissingRequiredRequestPaths and ImplyUpdateMask recognise the AIP standard
+// method requests below by the resource-typed field they carry.
+type Book struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Author        string                 `protobuf:"bytes,3,opt,name=author,proto3" json:"author,omitempty"`
+	Notes         string                 `protobuf:"bytes,4,opt,name=notes,proto3" json:"notes,omitempty"`
+	Courier       *Carrier               `protobuf:"bytes,5,opt,name=courier,proto3" json:"courier,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Book) Reset() {
+	*x = Book{}
+	mi := &file_internal_testpb_test_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Book) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Book) ProtoMessage() {}
+
+func (x *Book) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Book.ProtoReflect.Descriptor instead.
+func (*Book) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Book) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Book) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Book) GetAuthor() string {
+	if x != nil {
+		return x.Author
+	}
+	return ""
+}
+
+func (x *Book) GetNotes() string {
+	if x != nil {
+		return x.Notes
+	}
+	return ""
+}
+
+func (x *Book) GetCourier() *Carrier {
+	if x != nil {
+		return x.Courier
+	}
+	return nil
+}
+
+// CreateBookRequest is an AIP-133 create.
+type CreateBookRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	BookId        string                 `protobuf:"bytes,2,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
+	Book          *Book                  `protobuf:"bytes,3,opt,name=book,proto3" json:"book,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateBookRequest) Reset() {
+	*x = CreateBookRequest{}
+	mi := &file_internal_testpb_test_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateBookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateBookRequest) ProtoMessage() {}
+
+func (x *CreateBookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateBookRequest.ProtoReflect.Descriptor instead.
+func (*CreateBookRequest) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CreateBookRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *CreateBookRequest) GetBookId() string {
+	if x != nil {
+		return x.BookId
+	}
+	return ""
+}
+
+func (x *CreateBookRequest) GetBook() *Book {
+	if x != nil {
+		return x.Book
+	}
+	return nil
+}
+
+// UpdateBookRequest is an AIP-134 update.
+type UpdateBookRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Book          *Book                  `protobuf:"bytes,1,opt,name=book,proto3" json:"book,omitempty"`
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateBookRequest) Reset() {
+	*x = UpdateBookRequest{}
+	mi := &file_internal_testpb_test_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateBookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateBookRequest) ProtoMessage() {}
+
+func (x *UpdateBookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateBookRequest.ProtoReflect.Descriptor instead.
+func (*UpdateBookRequest) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *UpdateBookRequest) GetBook() *Book {
+	if x != nil {
+		return x.Book
+	}
+	return nil
+}
+
+func (x *UpdateBookRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+// BatchCreateBooksRequest is an AIP-233 batch create.
+type BatchCreateBooksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Requests      []*CreateBookRequest   `protobuf:"bytes,2,rep,name=requests,proto3" json:"requests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchCreateBooksRequest) Reset() {
+	*x = BatchCreateBooksRequest{}
+	mi := &file_internal_testpb_test_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchCreateBooksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchCreateBooksRequest) ProtoMessage() {}
+
+func (x *BatchCreateBooksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchCreateBooksRequest.ProtoReflect.Descriptor instead.
+func (*BatchCreateBooksRequest) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *BatchCreateBooksRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *BatchCreateBooksRequest) GetRequests() []*CreateBookRequest {
+	if x != nil {
+		return x.Requests
+	}
+	return nil
+}
+
+// BatchUpdateBooksRequest is an AIP-235 batch update.
+type BatchUpdateBooksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Parent        string                 `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Requests      []*UpdateBookRequest   `protobuf:"bytes,2,rep,name=requests,proto3" json:"requests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchUpdateBooksRequest) Reset() {
+	*x = BatchUpdateBooksRequest{}
+	mi := &file_internal_testpb_test_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchUpdateBooksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchUpdateBooksRequest) ProtoMessage() {}
+
+func (x *BatchUpdateBooksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchUpdateBooksRequest.ProtoReflect.Descriptor instead.
+func (*BatchUpdateBooksRequest) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *BatchUpdateBooksRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *BatchUpdateBooksRequest) GetRequests() []*UpdateBookRequest {
+	if x != nil {
+		return x.Requests
+	}
+	return nil
+}
+
+// GetBookRequest is no write: the request-level helpers ignore it.
+type GetBookRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBookRequest) Reset() {
+	*x = GetBookRequest{}
+	mi := &file_internal_testpb_test_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBookRequest) ProtoMessage() {}
+
+func (x *GetBookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_testpb_test_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBookRequest.ProtoReflect.Descriptor instead.
+func (*GetBookRequest) Descriptor() ([]byte, []int) {
+	return file_internal_testpb_test_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetBookRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var File_internal_testpb_test_proto protoreflect.FileDescriptor
 
 const file_internal_testpb_test_proto_rawDesc = "" +
 	"\n" +
-	"\x1ainternal/testpb/test.proto\x12\x05tests\x1a\x1fgoogle/api/field_behavior.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x05\n" +
+	"\x1ainternal/testpb/test.proto\x12\x05tests\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x05\n" +
 	"\bShipment\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1b\n" +
 	"\x06origin\x18\x02 \x01(\tB\x03\xe0A\x02R\x06origin\x12%\n" +
@@ -395,7 +739,30 @@ const file_internal_testpb_test_proto_rawDesc = "" +
 	"\x15UpdateShipmentRequest\x120\n" +
 	"\bshipment\x18\x01 \x01(\v2\x0f.tests.ShipmentB\x03\xe0A\x02R\bshipment\x12;\n" +
 	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
-	"updateMaskB2Z0github.com/protoc-contrib/aip-go/internal/testpbb\x06proto3"
+	"updateMask\"\xd9\x01\n" +
+	"\x04Book\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x19\n" +
+	"\x05title\x18\x02 \x01(\tB\x03\xe0A\x02R\x05title\x12\x1b\n" +
+	"\x06author\x18\x03 \x01(\tB\x03\xe0A\x02R\x06author\x12\x19\n" +
+	"\x05notes\x18\x04 \x01(\tB\x03\xe0A\x01R\x05notes\x12-\n" +
+	"\acourier\x18\x05 \x01(\v2\x0e.tests.CarrierB\x03\xe0A\x01R\acourier:6\xeaA3\n" +
+	"\x16tests.example.com/Book\x12\fbooks/{book}*\x05books2\x04book\"t\n" +
+	"\x11CreateBookRequest\x12\x1b\n" +
+	"\x06parent\x18\x01 \x01(\tB\x03\xe0A\x02R\x06parent\x12\x1c\n" +
+	"\abook_id\x18\x02 \x01(\tB\x03\xe0A\x01R\x06bookId\x12$\n" +
+	"\x04book\x18\x03 \x01(\v2\v.tests.BookB\x03\xe0A\x02R\x04book\"{\n" +
+	"\x11UpdateBookRequest\x12$\n" +
+	"\x04book\x18\x01 \x01(\v2\v.tests.BookB\x03\xe0A\x02R\x04book\x12@\n" +
+	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskB\x03\xe0A\x01R\n" +
+	"updateMask\"q\n" +
+	"\x17BatchCreateBooksRequest\x12\x1b\n" +
+	"\x06parent\x18\x01 \x01(\tB\x03\xe0A\x02R\x06parent\x129\n" +
+	"\brequests\x18\x02 \x03(\v2\x18.tests.CreateBookRequestB\x03\xe0A\x02R\brequests\"q\n" +
+	"\x17BatchUpdateBooksRequest\x12\x1b\n" +
+	"\x06parent\x18\x01 \x01(\tB\x03\xe0A\x02R\x06parent\x129\n" +
+	"\brequests\x18\x02 \x03(\v2\x18.tests.UpdateBookRequestB\x03\xe0A\x02R\brequests\")\n" +
+	"\x0eGetBookRequest\x12\x17\n" +
+	"\x04name\x18\x01 \x01(\tB\x03\xe0A\x02R\x04nameB2Z0github.com/protoc-contrib/aip-go/internal/testpbb\x06proto3"
 
 var (
 	file_internal_testpb_test_proto_rawDescOnce sync.Once
@@ -409,31 +776,43 @@ func file_internal_testpb_test_proto_rawDescGZIP() []byte {
 	return file_internal_testpb_test_proto_rawDescData
 }
 
-var file_internal_testpb_test_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_internal_testpb_test_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_internal_testpb_test_proto_goTypes = []any{
-	(*Shipment)(nil),              // 0: tests.Shipment
-	(*Carrier)(nil),               // 1: tests.Carrier
-	(*LineItem)(nil),              // 2: tests.LineItem
-	(*UpdateShipmentRequest)(nil), // 3: tests.UpdateShipmentRequest
-	nil,                           // 4: tests.Shipment.KeyedItemsEntry
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil), // 6: google.protobuf.FieldMask
+	(*Shipment)(nil),                // 0: tests.Shipment
+	(*Carrier)(nil),                 // 1: tests.Carrier
+	(*LineItem)(nil),                // 2: tests.LineItem
+	(*UpdateShipmentRequest)(nil),   // 3: tests.UpdateShipmentRequest
+	(*Book)(nil),                    // 4: tests.Book
+	(*CreateBookRequest)(nil),       // 5: tests.CreateBookRequest
+	(*UpdateBookRequest)(nil),       // 6: tests.UpdateBookRequest
+	(*BatchCreateBooksRequest)(nil), // 7: tests.BatchCreateBooksRequest
+	(*BatchUpdateBooksRequest)(nil), // 8: tests.BatchUpdateBooksRequest
+	(*GetBookRequest)(nil),          // 9: tests.GetBookRequest
+	nil,                             // 10: tests.Shipment.KeyedItemsEntry
+	(*timestamppb.Timestamp)(nil),   // 11: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),   // 12: google.protobuf.FieldMask
 }
 var file_internal_testpb_test_proto_depIdxs = []int32{
-	5, // 0: tests.Shipment.create_time:type_name -> google.protobuf.Timestamp
-	1, // 1: tests.Shipment.carrier:type_name -> tests.Carrier
-	2, // 2: tests.Shipment.line_items:type_name -> tests.LineItem
-	4, // 3: tests.Shipment.keyed_items:type_name -> tests.Shipment.KeyedItemsEntry
-	1, // 4: tests.Shipment.origin_carrier:type_name -> tests.Carrier
-	1, // 5: tests.Shipment.escorts:type_name -> tests.Carrier
-	0, // 6: tests.UpdateShipmentRequest.shipment:type_name -> tests.Shipment
-	6, // 7: tests.UpdateShipmentRequest.update_mask:type_name -> google.protobuf.FieldMask
-	2, // 8: tests.Shipment.KeyedItemsEntry.value:type_name -> tests.LineItem
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	11, // 0: tests.Shipment.create_time:type_name -> google.protobuf.Timestamp
+	1,  // 1: tests.Shipment.carrier:type_name -> tests.Carrier
+	2,  // 2: tests.Shipment.line_items:type_name -> tests.LineItem
+	10, // 3: tests.Shipment.keyed_items:type_name -> tests.Shipment.KeyedItemsEntry
+	1,  // 4: tests.Shipment.origin_carrier:type_name -> tests.Carrier
+	1,  // 5: tests.Shipment.escorts:type_name -> tests.Carrier
+	0,  // 6: tests.UpdateShipmentRequest.shipment:type_name -> tests.Shipment
+	12, // 7: tests.UpdateShipmentRequest.update_mask:type_name -> google.protobuf.FieldMask
+	1,  // 8: tests.Book.courier:type_name -> tests.Carrier
+	4,  // 9: tests.CreateBookRequest.book:type_name -> tests.Book
+	4,  // 10: tests.UpdateBookRequest.book:type_name -> tests.Book
+	12, // 11: tests.UpdateBookRequest.update_mask:type_name -> google.protobuf.FieldMask
+	5,  // 12: tests.BatchCreateBooksRequest.requests:type_name -> tests.CreateBookRequest
+	6,  // 13: tests.BatchUpdateBooksRequest.requests:type_name -> tests.UpdateBookRequest
+	2,  // 14: tests.Shipment.KeyedItemsEntry.value:type_name -> tests.LineItem
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_internal_testpb_test_proto_init() }
@@ -448,7 +827,7 @@ func file_internal_testpb_test_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_testpb_test_proto_rawDesc), len(file_internal_testpb_test_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

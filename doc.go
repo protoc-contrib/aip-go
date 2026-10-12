@@ -9,10 +9,19 @@
 //
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
 //   - AIP-134 field masks — [IsFullReplacement] and [MutablePaths] for "*",
-//     [ImpliedUpdateMask] for an omitted mask
+//     [ImpliedUpdateMask] for an omitted mask, and [ImplyUpdateMask] to fill
+//     one in on a whole request
 //   - AIP-203 field behavior — [ClearFields], [CopyFields],
-//     [MissingRequiredPaths] to enforce REQUIRED on a create or an update, and
+//     [MissingRequiredPaths] to enforce REQUIRED on a create or an update,
+//     [MissingRequiredRequestPaths] to do so on a whole request, and
 //     [ChangedImmutablePaths] to refuse a changed IMMUTABLE value
+//
+// The request-level functions recognise the AIP standard method requests by
+// their shape: a create (AIP-133) carries its resource in the field whose type
+// declares google.api.resource, an update (AIP-134) also has an update_mask,
+// and a batch (AIP-233, AIP-235) carries such requests in `requests`. A server
+// runs [ClearFields] with [OutputOnly], then [ImplyUpdateMask], then
+// [MissingRequiredRequestPaths], on every request.
 //
 // This stack is deliberately stricter than AIP-161 about update masks. AIP-161
 // has a mask that names an OUTPUT_ONLY field ignored; here protovalidate's

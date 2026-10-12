@@ -21,11 +21,11 @@ concept, not by a package path.
 | [122](https://google.aip.dev/122) | resource names | ✅ runtime only |
 | [132](https://google.aip.dev/132#ordering) | `order_by` | not here — query layer |
 | [158](https://google.aip.dev/158) | `page_token` / `page_size` | not here — query layer |
-| [134](https://google.aip.dev/134) | `*` expansion, implied mask | ✅ |
+| [134](https://google.aip.dev/134) | `*` expansion, implied mask | ✅ `MutablePaths`, `ImpliedUpdateMask`, `ImplyUpdateMask` |
 | [134](https://google.aip.dev/134) | `update_mask` validation | not here — protovalidate `field_mask.in` |
 | [203](https://google.aip.dev/203) | field behavior: clearing, copying | ✅ |
 | [203](https://google.aip.dev/203#immutable) | refusing a changed `IMMUTABLE` value | ✅ `ChangedImmutablePaths` |
-| [203](https://google.aip.dev/203#required) | `REQUIRED` on a resource's fields, per create or update | ✅ `MissingRequiredPaths` |
+| [203](https://google.aip.dev/203#required) | `REQUIRED` on a resource's fields, per create or update | ✅ `MissingRequiredPaths`, `MissingRequiredRequestPaths` |
 | [203](https://google.aip.dev/203#required) | `REQUIRED` on a request's own fields | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 
@@ -132,6 +132,36 @@ if len(missing) > 0 {
 
 Unset is protobuf presence, as for the implied mask: an explicit `false` on an
 `optional bool` is set, and a plain `bool` must be `true`.
+
+**Whole requests, not just resources.** Which resource a request writes, and
+whether it is a create or an update, are AIP conventions too, so a server need
+not restate them per request. `MissingRequiredRequestPaths` and
+`ImplyUpdateMask` take the request itself and recognise:
+
+- **a create** (AIP-133): the resource is the singular field whose message type
+  declares `google.api.resource`; every `REQUIRED` field is checked;
+- **an update** (AIP-134): the request's type also has an `update_mask`
+  `google.protobuf.FieldMask` field; only the fields the mask names are
+  checked. The schema decides, never the value: an unset mask names nothing,
+  it does not turn an update into a create;
+- **a batch** (AIP-233, AIP-235): a repeated `requests` field of such requests;
+  each entry is handled as its own request.
+
+Any other request is left alone. One interceptor then serves every RPC, in this
+order:
+
+```go
+aip.ClearFields(req, aip.OutputOnly) // server-owned values never reach the mask
+aip.ImplyUpdateMask(req)             // an omitted or empty mask becomes the implied one
+for _, path := range aip.MissingRequiredRequestPaths(req) {
+	// path.String(): "(acme.v1.BatchCreateBooksRequest).requests[1].book.title"
+}
+```
+
+`MissingRequiredRequestPaths` returns `protopath.Path`s rather than strings, so
+a batch entry's index survives and a caller can build a protovalidate field path
+from the steps. Both functions read the request through reflection, so a
+`dynamicpb` message works as a generated one does.
 
 **Stricter than AIP-161, on purpose.** AIP-161 has a mask that names an
 `OUTPUT_ONLY` field ignored. Here `field_mask.in` lists only the writable
