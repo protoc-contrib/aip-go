@@ -5,6 +5,7 @@ syntax = "proto3";
 package tests;
 
 import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -55,4 +56,52 @@ message LineItem {
 message UpdateShipmentRequest {
   Shipment shipment = 1 [(google.api.field_behavior) = REQUIRED];
   google.protobuf.FieldMask update_mask = 2;
+}
+
+// Book is a resource (google.api.resource) for the request-level helpers:
+// MissingRequiredRequestPaths and ImplyUpdateMask recognise the AIP standard
+// method requests below by the resource-typed field they carry.
+message Book {
+  option (google.api.resource) = {
+    type: "tests.example.com/Book"
+    pattern: "books/{book}"
+    singular: "book"
+    plural: "books"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string title = 2 [(google.api.field_behavior) = REQUIRED];
+  string author = 3 [(google.api.field_behavior) = REQUIRED];
+  string notes = 4 [(google.api.field_behavior) = OPTIONAL];
+  Carrier courier = 5 [(google.api.field_behavior) = OPTIONAL];
+}
+
+// CreateBookRequest is an AIP-133 create.
+message CreateBookRequest {
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+  string book_id = 2 [(google.api.field_behavior) = OPTIONAL];
+  Book book = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// UpdateBookRequest is an AIP-134 update.
+message UpdateBookRequest {
+  Book book = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2 [(google.api.field_behavior) = OPTIONAL];
+}
+
+// BatchCreateBooksRequest is an AIP-233 batch create.
+message BatchCreateBooksRequest {
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+  repeated CreateBookRequest requests = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// BatchUpdateBooksRequest is an AIP-235 batch update.
+message BatchUpdateBooksRequest {
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+  repeated UpdateBookRequest requests = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// GetBookRequest is no write: the request-level helpers ignore it.
+message GetBookRequest {
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
 }
