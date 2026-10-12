@@ -12,9 +12,9 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
-// MissingRequiredRequestPaths returns the REQUIRED fields that request, an AIP
-// standard method request, leaves unset, as paths from request, in the order
-// the request holds them:
+// ValidateRequired returns a [*RequiredError] naming the REQUIRED fields that
+// request, an AIP standard method request, leaves unset, as paths from
+// request, in the order the request holds them; nil when there are none:
 //
 //   - A create (AIP-133) carries its resource in the singular field whose
 //     message type declares google.api.resource; every REQUIRED field of the
@@ -27,22 +27,22 @@ import (
 //   - A batch (AIP-233, AIP-235) carries such requests in a repeated `requests`
 //     field; each entry is checked as its own request, under `requests[i]`.
 //
-// Any other request yields nil, and so does an unset resource, which the
-// request's own `required` rule reports. It is [MissingRequiredPaths] applied
-// to each resource the request writes, with the same rules for nested
-// messages, presence and "*". An update that omitted its mask names nothing
-// until [ImplyUpdateMask] fills it in, so a server runs, in order:
+// Any other request is valid, and so is an unset resource, which the request's
+// own `required` rule reports. It is [ValidateRequiredFields] applied to each
+// resource the request writes, with the same rules for nested messages,
+// presence and "*". An update that omitted its mask names nothing until
+// [ImplyRequest] fills it in, so a server runs, in order:
 //
 //	aip.ClearFields(req, aip.OutputOnly)
-//	aip.ImplyUpdateMask(req)
-//	for _, path := range aip.MissingRequiredRequestPaths(req) {
-//		// path.String(): "(acme.v1.BatchCreateBooksRequest).requests[1].book.title"
+//	aip.ImplyRequest(req, newID)
+//	if err := aip.ValidateRequired(req); err != nil {
+//		// err.Error(): "required fields are unset: requests[1].book.title"
 //	}
 //
-// A nil or typed-nil request yields nil.
+// A nil or typed-nil request is valid.
 //
 // See: https://google.aip.dev/203#required.
-func MissingRequiredRequestPaths(request proto.Message) []protopath.Path {
+func ValidateRequired(request proto.Message) error {
 	message, ok := reflectRequest(request)
 	if !ok {
 		return nil
@@ -57,11 +57,112 @@ func MissingRequiredRequestPaths(request proto.Message) []protopath.Path {
 			mask = maskOf(w.request, w.mask)
 		}
 		at := append(slices.Clip(w.path), protopath.FieldAccess(w.resource))
-		for _, name := range MissingRequiredPaths(w.request.Get(w.resource).Message().Interface(), mask) {
-			missing = append(missing, fieldPath(at, w.resource.Message(), name))
+		missing = append(missing, requiredPaths(w.request.Get(w.resource).Message(), at, mask)...)
+	}
+	return newRequiredError(missing)
+}
+
+// ImplyRequest fills in what AIP lets a client leave out of a create, update
+// or batch request: a create's resource name ([ImplyResourceName]), then an
+// update's omitted mask ([ImplyUpdateMask]). Clear OUTPUT_ONLY fields first,
+// and validate after:
+//
+//	aip.ClearFields(req, aip.OutputOnly)
+//	aip.ImplyRequest(req, func() string { return uuid.Must(uuid.NewV7()).String() })
+//	err := aip.ValidateRequired(req)
+//
+// A nil or typed-nil request is left alone.
+func ImplyRequest(request proto.Message, newID func() string) {
+	ImplyResourceName(request, newID)
+	ImplyUpdateMask(request)
+}
+
+// ImplyResourceName names the resource a create request (AIP-133) carries, and
+// the one each create entry of a batch (AIP-233) carries, as AIP-133 leaves to
+// the server:
+//
+//   - an omitted `<resource>_id` — the request field named for the resource
+//     field, e.g. `book_id` for `book` — becomes newID();
+//   - the resource's `parent` field, when it has one, is copied from the
+//     request's `parent`;
+//   - the resource's `name` is built from the first pattern its
+//     google.api.resource declares, replacing any name the client sent: a
+//     top-level pattern's collection and the id (`books/{book}` gives
+//     `books/<id>`), or a nested pattern's last collection under the request's
+//     `parent` (`books/{book}/chapters/{chapter}` gives `<parent>/chapters/<id>`).
+//
+// An id the client sent is used as is: whether it is well formed is the
+// request's protovalidate rules to check. A request without a `<resource>_id`
+// field, an unset resource, an update — whose name selects its target — and
+// any other request are left untouched; requests are recognised as
+// [ValidateRequired] recognises them. newID is the caller's, so the id scheme
+// is too:
+//
+//	aip.ImplyResourceName(req, func() string { return uuid.Must(uuid.NewV7()).String() })
+//
+// A nil or typed-nil request is left alone.
+//
+// See: https://google.aip.dev/133#user-specified-ids.
+func ImplyResourceName(request proto.Message, newID func() string) {
+	message, ok := reflectRequest(request)
+	if !ok {
+		return
+	}
+	for w := range writes(message, nil) {
+		if w.mask != nil || !w.request.Has(w.resource) {
+			continue // an update, or nothing to name
+		}
+		fields := w.request.Descriptor().Fields()
+		id := fields.ByName(protoreflect.Name(string(w.resource.Name()) + "_id"))
+		if id == nil || id.Kind() != protoreflect.StringKind || id.IsList() {
+			continue // a create the server names some other way
+		}
+		if w.request.Get(id).String() == "" {
+			w.request.Set(id, protoreflect.ValueOfString(newID()))
+		}
+		resource := w.request.Mutable(w.resource).Message()
+		parent := ""
+		if field := stringField(fields, "parent"); field != nil {
+			parent = w.request.Get(field).String()
+			if field := stringField(resource.Descriptor().Fields(), "parent"); field != nil {
+				resource.Set(field, protoreflect.ValueOfString(parent))
+			}
+		}
+		if field := stringField(resource.Descriptor().Fields(), "name"); field != nil {
+			name := resourceName(w.resource.Message(), parent, w.request.Get(id).String())
+			resource.Set(field, protoreflect.ValueOfString(name))
 		}
 	}
-	return missing
+}
+
+// resourceName builds the name of a resource of type resource from the first
+// pattern its google.api.resource declares: the collection before the last
+// variable and id for a top-level pattern, or that collection under parent for
+// a nested one.
+func resourceName(resource protoreflect.MessageDescriptor, parent, id string) string {
+	descriptor, _ := proto.GetExtension(resource.Options(), annotations.E_Resource).(*annotations.ResourceDescriptor)
+	patterns := descriptor.GetPattern()
+	if len(patterns) == 0 {
+		return ""
+	}
+	segments := strings.Split(patterns[0], "/")
+	if len(segments) < 2 {
+		return ""
+	}
+	collection := strings.Join(segments[:len(segments)-1], "/")
+	if strings.Contains(collection, "{") {
+		collection = parent + "/" + segments[len(segments)-2]
+	}
+	return collection + "/" + id
+}
+
+// stringField returns the singular string field of fields named name, or nil.
+func stringField(fields protoreflect.FieldDescriptors, name protoreflect.Name) protoreflect.FieldDescriptor {
+	field := fields.ByName(name)
+	if field == nil || field.Kind() != protoreflect.StringKind || field.IsList() {
+		return nil
+	}
+	return field
 }
 
 // ImplyUpdateMask sets, on an update request (AIP-134) whose update_mask is
@@ -69,10 +170,10 @@ func MissingRequiredRequestPaths(request proto.Message) []protopath.Path {
 // the mask [ImpliedUpdateMask] implies from its resource. A mask the client
 // sent is kept, and a create, an update without a resource, or any other
 // request is left untouched. Requests are recognised as
-// [MissingRequiredRequestPaths] recognises them.
+// [ValidateRequired] recognises them.
 //
 // Clear OUTPUT_ONLY fields first, so the implied mask never names a value a
-// client tried to set on one:
+// client tried to set on one; [ImplyRequest] runs it with [ImplyResourceName]:
 //
 //	aip.ClearFields(req, aip.OutputOnly)
 //	aip.ImplyUpdateMask(req)

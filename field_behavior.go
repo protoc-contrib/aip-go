@@ -6,6 +6,7 @@ import (
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protopath"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -121,9 +122,9 @@ func CopyFields(dst, src proto.Message, behaviors ...FieldBehavior) error {
 	return nil
 }
 
-// MissingRequiredPaths returns the paths of the fields of resource annotated
-// REQUIRED that are unset, in declaration order, depth first, with a nested
-// field's path dot-joined to its parent's (`carrier.name`). It reads resource
+// ValidateRequiredFields returns a [*RequiredError] naming the fields of
+// resource annotated REQUIRED that are unset, as paths from resource, in
+// declaration order, depth first; nil when there are none. It reads resource
 // and modifies nothing.
 //
 // AIP-203 asks a different thing of a create and of a partial update, and the
@@ -141,8 +142,9 @@ func CopyFields(dst, src proto.Message, behaviors ...FieldBehavior) error {
 //     An empty mask names nothing and reports nothing.
 //
 // An update that omitted its mask must have the implied mask filled in first,
-// with [ImpliedUpdateMask]: `GetUpdateMask()` on such a request is nil, which
-// reads as a create and checks every field.
+// with [ImplyUpdateMask]: `GetUpdateMask()` on such a request is nil, which
+// reads as a create and checks every field. [ValidateRequired] does both
+// for a whole request and needs no mask passed.
 //
 // The mask's paths are matched as written: "*" names no field here, so
 // expand it with [MutablePaths] first, and paths that name no field are
@@ -162,14 +164,14 @@ func CopyFields(dst, src proto.Message, behaviors ...FieldBehavior) error {
 // protovalidate cannot tell which method it is validating, so REQUIRED on a
 // resource field is not something its rules can say:
 //
-//	if missing := aip.MissingRequiredPaths(req.GetCollection(), req.GetUpdateMask()); len(missing) > 0 {
-//		return status.Errorf(codes.InvalidArgument, "required fields are missing: %v", missing)
+//	if err := aip.ValidateRequiredFields(req.GetCollection(), req.GetUpdateMask()); err != nil {
+//		return status.Error(codes.InvalidArgument, err.Error())
 //	}
 //
-// A nil or typed-nil resource yields nil.
+// A nil or typed-nil resource is valid.
 //
 // See: https://google.aip.dev/203#required.
-func MissingRequiredPaths(resource proto.Message, mask *fieldmaskpb.FieldMask) []string {
+func ValidateRequiredFields(resource proto.Message, mask *fieldmaskpb.FieldMask) error {
 	if resource == nil {
 		return nil
 	}
@@ -177,7 +179,49 @@ func MissingRequiredPaths(resource proto.Message, mask *fieldmaskpb.FieldMask) [
 	if !message.IsValid() {
 		return nil
 	}
-	return missingRequiredPaths(message, "", mask != nil, mask.GetPaths(), nil)
+	root := protopath.Path{protopath.Root(message.Descriptor())}
+	return newRequiredError(requiredPaths(message, root, mask))
+}
+
+// requiredPaths returns the REQUIRED fields of message that mask, nil for a
+// create, finds unset, as paths under at.
+func requiredPaths(message protoreflect.Message, at protopath.Path, mask *fieldmaskpb.FieldMask) []protopath.Path {
+	var paths []protopath.Path
+	for _, name := range missingRequiredPaths(message, "", mask != nil, mask.GetPaths(), nil) {
+		paths = append(paths, fieldPath(at, message.Descriptor(), name))
+	}
+	return paths
+}
+
+// RequiredError reports the fields annotated REQUIRED that a resource or
+// request leaves unset (AIP-203), as [ValidateRequiredFields] and
+// [ValidateRequired] return it. Get the paths with errors.As:
+//
+//	var required *aip.RequiredError
+//	if errors.As(err, &required) {
+//		for _, path := range required.Paths {
+//			// path.String(): "(acme.v1.CreateBookRequest).book.title"
+//		}
+//	}
+type RequiredError struct {
+	// Paths are the unset fields, each from the message validated, in the
+	// order it holds them.
+	Paths []protopath.Path
+}
+
+// Error lists the unset fields, e.g.
+// "required fields are unset: book.title, book.author".
+func (e *RequiredError) Error() string {
+	return "required fields are unset: " + joinPaths(e.Paths)
+}
+
+// newRequiredError returns a [*RequiredError] for paths, or nil when there are
+// none.
+func newRequiredError(paths []protopath.Path) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	return &RequiredError{Paths: paths}
 }
 
 // missingRequiredPaths appends to missing the REQUIRED fields of message that
@@ -241,9 +285,10 @@ func isSingularMessage(field protoreflect.FieldDescriptor) bool {
 		(field.Kind() == protoreflect.MessageKind || field.Kind() == protoreflect.GroupKind)
 }
 
-// ChangedImmutablePaths returns the top-level fields annotated IMMUTABLE that
-// update populates with a value different from the one existing holds, in
-// declaration order. It reads both messages and modifies neither.
+// ValidateImmutable returns an [*ImmutableError] naming the top-level fields
+// annotated IMMUTABLE that update populates with a value different from the
+// one existing holds, as paths from update, in declaration order; nil when
+// there are none. It reads both messages and modifies neither.
 //
 // AIP-203: an IMMUTABLE field may be set on create and never changed
 // afterwards, and a service must reject a request that tries. A client echoing
@@ -254,8 +299,8 @@ func isSingularMessage(field protoreflect.FieldDescriptor) bool {
 //
 //	stored, err := repository.Get(ctx, name)
 //	// ...
-//	if changed := aip.ChangedImmutablePaths(stored, req.GetCollection()); len(changed) > 0 {
-//		return status.Errorf(codes.InvalidArgument, "immutable fields cannot change: %v", changed)
+//	if err := aip.ValidateImmutable(stored, req.GetCollection()); err != nil {
+//		return status.Error(codes.InvalidArgument, err.Error())
 //	}
 //
 // Values are compared as [proto.Equal] compares them, so a message, repeated
@@ -263,13 +308,13 @@ func isSingularMessage(field protoreflect.FieldDescriptor) bool {
 // UNORDERED_LIST is compared as a multiset — the same elements, each as often,
 // in any order — since AIP-203 lets the service reorder such a list, and a
 // client echoing it back in the order it was returned is not changing it. A
-// nil existing or update — or a typed nil — yields nil. existing and update
+// nil existing or update — or a typed nil — is valid. existing and update
 // must be the same message type; different types panic, as [proto.Merge]
 // does, since that is a programming error rather than something a request can
 // cause.
 //
 // See: https://google.aip.dev/203#immutable.
-func ChangedImmutablePaths(existing, update proto.Message) []string {
+func ValidateImmutable(existing, update proto.Message) error {
 	if existing == nil || update == nil {
 		return nil
 	}
@@ -279,11 +324,12 @@ func ChangedImmutablePaths(existing, update proto.Message) []string {
 	}
 	if existingReflect.Descriptor() != updateReflect.Descriptor() {
 		panic(fmt.Sprintf(
-			"changed immutable paths: existing is %s but update is %s",
+			"validate immutable: existing is %s but update is %s",
 			existingReflect.Descriptor().FullName(), updateReflect.Descriptor().FullName(),
 		))
 	}
-	var changed []string
+	var changed []protopath.Path
+	root := protopath.Root(updateReflect.Descriptor())
 	fields := updateReflect.Descriptor().Fields()
 	for i := range fields.Len() {
 		field := fields.Get(i)
@@ -291,10 +337,54 @@ func ChangedImmutablePaths(existing, update proto.Message) []string {
 			continue
 		}
 		if !fieldEqual(existingReflect, updateReflect, field) {
-			changed = append(changed, string(field.Name()))
+			changed = append(changed, protopath.Path{root, protopath.FieldAccess(field)})
 		}
 	}
-	return changed
+	if len(changed) == 0 {
+		return nil
+	}
+	return &ImmutableError{Paths: changed}
+}
+
+// ImmutableError reports the IMMUTABLE fields an update changes (AIP-203), as
+// [ValidateImmutable] returns it. Get the paths with errors.As, as for
+// [RequiredError].
+type ImmutableError struct {
+	// Paths are the changed fields, each from the update, in declaration order.
+	Paths []protopath.Path
+}
+
+// Error lists the changed fields, e.g. "immutable fields cannot change: sku".
+func (e *ImmutableError) Error() string {
+	return "immutable fields cannot change: " + joinPaths(e.Paths)
+}
+
+// joinPaths renders paths as a comma-separated list of dotted paths, each
+// without its root step: `book.title`, `requests[1].book.author`.
+func joinPaths(paths []protopath.Path) string {
+	rendered := make([]string, len(paths))
+	for i, path := range paths {
+		rendered[i] = dottedPath(path)
+	}
+	return strings.Join(rendered, ", ")
+}
+
+// dottedPath renders path as field names joined by dots, list indices in
+// brackets, without its root step: `requests[1].book.title`.
+func dottedPath(path protopath.Path) string {
+	var b strings.Builder
+	for _, step := range path {
+		switch step.Kind() {
+		case protopath.FieldAccessStep:
+			if b.Len() > 0 {
+				b.WriteByte('.')
+			}
+			b.WriteString(string(step.FieldDescriptor().Name()))
+		case protopath.ListIndexStep:
+			fmt.Fprintf(&b, "[%d]", step.ListIndex())
+		}
+	}
+	return b.String()
 }
 
 // fieldEqual reports whether a and b hold the same value for field, compared

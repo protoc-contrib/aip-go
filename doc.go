@@ -8,20 +8,23 @@
 // The AIPs implemented here:
 //
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
+//   - AIP-133 create — [ImplyResourceName] to assign an omitted id and build
+//     the resource's name on a whole request
 //   - AIP-134 field masks — [IsFullReplacement] and [MutablePaths] for "*",
 //     [ImpliedUpdateMask] for an omitted mask, and [ImplyUpdateMask] to fill
-//     one in on a whole request
+//     one in on a whole request; [ImplyRequest] runs both implications
 //   - AIP-203 field behavior — [ClearFields], [CopyFields],
-//     [MissingRequiredPaths] to enforce REQUIRED on a create or an update,
-//     [MissingRequiredRequestPaths] to do so on a whole request, and
-//     [ChangedImmutablePaths] to refuse a changed IMMUTABLE value
+//     [ValidateRequiredFields] to enforce REQUIRED on a create or an update,
+//     [ValidateRequired] to do so on a whole request, and
+//     [ValidateImmutable] to refuse a changed IMMUTABLE value; they return a
+//     [*RequiredError] or [*ImmutableError] holding the fields' paths
 //
 // The request-level functions recognise the AIP standard method requests by
 // their shape: a create (AIP-133) carries its resource in the field whose type
 // declares google.api.resource, an update (AIP-134) also has an update_mask,
 // and a batch (AIP-233, AIP-235) carries such requests in `requests`. A server
-// runs [ClearFields] with [OutputOnly], then [ImplyUpdateMask], then
-// [MissingRequiredRequestPaths], on every request.
+// runs [ClearFields] with [OutputOnly], then [ImplyRequest], then
+// [ValidateRequired], on every request.
 //
 // This stack is deliberately stricter than AIP-161 about update masks. AIP-161
 // has a mask that names an OUTPUT_ONLY field ignored; here protovalidate's
@@ -29,13 +32,13 @@
 // with InvalidArgument — a clearer answer than a silent no-op, and one that
 // protoc-gen-aip-lint's update-mask-writable-fields rule keeps in step with
 // `google.api.field_behavior`. A changed IMMUTABLE value is an error too
-// ([ChangedImmutablePaths]), rather than dropped by the implied mask or by "*".
+// ([ValidateImmutable]), rather than dropped by the implied mask or by "*".
 //
 // Validation is split with protovalidate. A request's own fields — `parent`,
 // the resource field itself — every value's format, and whether an
 // update_mask names real fields stay protovalidate's rules: `required`,
 // `min_len`, `field_mask.in`. REQUIRED on a resource's own fields is
-// [MissingRequiredPaths]'s: a resource message is shared by its create and
+// [ValidateRequiredFields]'s: a resource message is shared by its create and
 // update requests, a create must set every REQUIRED field while an update need
 // only set the ones its mask names, and protovalidate cannot tell which method
 // it is validating. Per-request CEL rules were the workaround this replaces.
