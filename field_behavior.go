@@ -241,9 +241,9 @@ func isSingularMessage(field protoreflect.FieldDescriptor) bool {
 		(field.Kind() == protoreflect.MessageKind || field.Kind() == protoreflect.GroupKind)
 }
 
-// ChangedImmutablePaths returns the top-level fields annotated IMMUTABLE that update
-// populates with a value different from the one existing holds, in declaration
-// order. It reads both messages and modifies neither.
+// ChangedImmutablePaths returns the top-level fields annotated IMMUTABLE that
+// update populates with a value different from the one existing holds, in
+// declaration order. It reads both messages and modifies neither.
 //
 // AIP-203: an IMMUTABLE field may be set on create and never changed
 // afterwards, and a service must reject a request that tries. A client echoing
@@ -263,10 +263,10 @@ func isSingularMessage(field protoreflect.FieldDescriptor) bool {
 // UNORDERED_LIST is compared as a multiset — the same elements, each as often,
 // in any order — since AIP-203 lets the service reorder such a list, and a
 // client echoing it back in the order it was returned is not changing it. A
-// nil existing or update — or a typed
-// nil — yields nil. existing and update must be the same message type;
-// different types panic, as [proto.Merge] does, since that is a programming
-// error rather than something a request can cause.
+// nil existing or update — or a typed nil — yields nil. existing and update
+// must be the same message type; different types panic, as [proto.Merge]
+// does, since that is a programming error rather than something a request can
+// cause.
 //
 // See: https://google.aip.dev/203#immutable.
 func ChangedImmutablePaths(existing, update proto.Message) []string {
