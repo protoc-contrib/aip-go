@@ -27,6 +27,8 @@ concept, not by a package path.
 | [203](https://google.aip.dev/203#required) | fields of a kind left unset (`REQUIRED`), per create or update | ✅ `ValidateFields` |
 | [203](https://google.aip.dev/203#required) | `REQUIRED` on a request's own fields | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
+| [133](https://google.aip.dev/133), [134](https://google.aip.dev/134), [233](https://google.aip.dev/233), [235](https://google.aip.dev/235) | standard-method request shapes | ✅ `ResourceWrites` |
+| — | Connect interceptor applying all of the above | ✅ `FieldBehaviorInterceptor` |
 
 ## Ordering, pagination and filtering
 
@@ -81,7 +83,8 @@ aip.ClearFields(resp, aip.InputOnly) // never returned
 ```
 
 Which field of a request holds the resource, and whether a request is a create
-or an update, is the caller's to say: nothing here recognises request shapes.
+or an update, is what [`ResourceWrites`](#request-shapes-and-the-connect-interceptor)
+works out; these primitives take the resource and mask from the caller.
 
 **`ValidateFields` and the mask.** A create must set every `REQUIRED` field; a
 partial update may omit one its mask does not name, but must set one it names,
@@ -121,6 +124,53 @@ names real fields are protovalidate's rules: `(buf.validate.field).required`,
 `min_len`, `field_mask.in`. What protovalidate cannot do is tell a create from
 an update: a resource message is shared by both requests, so `REQUIRED` on its
 fields is `ValidateFields`', reading the annotation instead.
+
+## Request shapes and the Connect interceptor
+
+`ResourceWrites(req)` yields the resources an AIP standard method request writes. The
+request's shape, not its values, says what it is: a create (AIP-133) carries its
+resource in the singular field whose type declares `google.api.resource`; an
+update (AIP-134) also has an `update_mask` `google.protobuf.FieldMask` field, so
+an unset mask names nothing rather than turning it into a create; a batch
+(AIP-233, AIP-235) carries such requests in `requests`, each yielded under
+`requests[i]`. Each `ResourceWrite` has the resource, its path, and either a
+`ResourceCreate` (the `<resource>_id`) or a `ResourceUpdate` (the
+`update_mask`).
+
+`FieldBehaviorInterceptor` is a `connect.Interceptor` applying all of it on the
+server, with fixed behavior:
+
+| RPC | Request | Response |
+| --- | --- | --- |
+| unary | clear `OUTPUT_ONLY`; on a create, an omitted `<resource>_id` becomes a UUIDv7; on an update, an omitted mask becomes `ImpliedFieldMask`; then protovalidate plus `REQUIRED` (every field on a create, the masked ones on an update), as one `InvalidArgument` with a `buf.validate.Violations` detail | clear `INPUT_ONLY` |
+| streaming | clear `OUTPUT_ONLY` on every message received | clear `INPUT_ONLY` on every message sent |
+
+Streams have no standard-method shape, so nothing is filled in or validated on
+them.
+
+**A create's name is the handler's to build.** AIP-133 has the server form the
+name from the request's `parent` and the id; the interceptor only fills in an
+omitted id. The handler reads both from the request — e.g. the generated
+`ParseItemID()` and `ParseParent()` — and the `name` a response returns comes
+from storage, so the resource's `name` and `parent` on the request are left as
+they arrive. A client passes through untouched. Clearing changes messages in place,
+including the response a handler returns and every message it sends.
+
+```go
+fields, err := aip.NewFieldBehaviorInterceptor()
+if err != nil {
+	return err
+}
+path, handler := acmev1connect.NewBookServiceHandler(svc, connect.WithInterceptors(fields))
+```
+
+A `REQUIRED` field left unset reads exactly as protovalidate's own `required`
+violation — rule id `required`, message `value is required` — in the same error
+as the request's protovalidate violations: `validation error: book.title: value
+is required`. For a different policy — other kinds, IMMUTABLE cleared on update,
+another id scheme — build an interceptor from `ClearFields`, `ValidateFields`,
+`ImpliedFieldMask` and `ResourceWrites`; `ResourceCreate.SetID` sets an id of
+your own scheme.
 
 ## Resource names
 
