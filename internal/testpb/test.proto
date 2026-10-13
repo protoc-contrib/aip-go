@@ -5,8 +5,6 @@ syntax = "proto3";
 package tests;
 
 import "google/api/field_behavior.proto";
-import "google/api/resource.proto";
-import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/protoc-contrib/aip-go/internal/testpb";
@@ -27,12 +25,11 @@ message Shipment {
   // An explicit-presence required bool: `false` is a real value.
   optional bool fragile = 11 [(google.api.field_behavior) = REQUIRED];
   repeated string labels = 12 [(google.api.field_behavior) = REQUIRED];
-  // IMMUTABLE fields of a message and a repeated shape, for
-  // ChangedImmutablePaths. `route` is ordered: another order is a change.
+  // IMMUTABLE fields of a message and a repeated shape: another kind for
+  // ClearFields and ValidateFields to act on.
   Carrier origin_carrier = 13 [(google.api.field_behavior) = IMMUTABLE];
   repeated string route = 14 [(google.api.field_behavior) = IMMUTABLE];
-  // IMMUTABLE and UNORDERED_LIST: the same elements in another order are not a
-  // change.
+  // IMMUTABLE and UNORDERED_LIST: a field annotated with two kinds.
   repeated string stops = 15 [
     (google.api.field_behavior) = IMMUTABLE,
     (google.api.field_behavior) = UNORDERED_LIST
@@ -51,85 +48,4 @@ message Carrier {
 message LineItem {
   string sku = 1 [(google.api.field_behavior) = REQUIRED];
   int32 quantity = 2;
-}
-
-message UpdateShipmentRequest {
-  Shipment shipment = 1 [(google.api.field_behavior) = REQUIRED];
-  google.protobuf.FieldMask update_mask = 2;
-}
-
-// Book is a resource (google.api.resource) for the request-level helpers:
-// ValidateRequired, ImplyResourceName and ImplyUpdateMask recognise the AIP
-// standard method requests below by the resource-typed field they carry.
-message Book {
-  option (google.api.resource) = {
-    type: "tests.example.com/Book"
-    pattern: "books/{book}"
-    singular: "book"
-    plural: "books"
-  };
-
-  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
-  string title = 2 [(google.api.field_behavior) = REQUIRED];
-  string author = 3 [(google.api.field_behavior) = REQUIRED];
-  string notes = 4 [(google.api.field_behavior) = OPTIONAL];
-  Carrier courier = 5 [(google.api.field_behavior) = OPTIONAL];
-}
-
-// CreateBookRequest is an AIP-133 create.
-message CreateBookRequest {
-  string parent = 1 [(google.api.field_behavior) = REQUIRED];
-  string book_id = 2 [(google.api.field_behavior) = OPTIONAL];
-  Book book = 3 [(google.api.field_behavior) = REQUIRED];
-}
-
-// UpdateBookRequest is an AIP-134 update.
-message UpdateBookRequest {
-  Book book = 1 [(google.api.field_behavior) = REQUIRED];
-  google.protobuf.FieldMask update_mask = 2 [(google.api.field_behavior) = OPTIONAL];
-}
-
-// BatchCreateBooksRequest is an AIP-233 batch create.
-message BatchCreateBooksRequest {
-  string parent = 1 [(google.api.field_behavior) = REQUIRED];
-  repeated CreateBookRequest requests = 2 [(google.api.field_behavior) = REQUIRED];
-}
-
-// BatchUpdateBooksRequest is an AIP-235 batch update.
-message BatchUpdateBooksRequest {
-  string parent = 1 [(google.api.field_behavior) = REQUIRED];
-  repeated UpdateBookRequest requests = 2 [(google.api.field_behavior) = REQUIRED];
-}
-
-// GetBookRequest is no write: the request-level helpers ignore it.
-message GetBookRequest {
-  string name = 1 [(google.api.field_behavior) = REQUIRED];
-}
-
-// Chapter is a resource under a Book: its name is built from the create
-// request's parent, which ImplyResourceName also copies onto it.
-message Chapter {
-  option (google.api.resource) = {
-    type: "tests.example.com/Chapter"
-    pattern: "books/{book}/chapters/{chapter}"
-    singular: "chapter"
-    plural: "chapters"
-  };
-
-  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
-  string parent = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
-  string title = 3 [(google.api.field_behavior) = REQUIRED];
-}
-
-// CreateChapterRequest is an AIP-133 create of a nested resource.
-message CreateChapterRequest {
-  string parent = 1 [(google.api.field_behavior) = REQUIRED];
-  string chapter_id = 2 [(google.api.field_behavior) = OPTIONAL];
-  Chapter chapter = 3 [(google.api.field_behavior) = REQUIRED];
-}
-
-// ImportBookRequest carries a Book with no `book_id`: a create the server
-// names some other way, which ImplyResourceName leaves alone.
-message ImportBookRequest {
-  Book book = 1 [(google.api.field_behavior) = REQUIRED];
 }

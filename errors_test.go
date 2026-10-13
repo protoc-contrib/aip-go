@@ -11,34 +11,16 @@ import (
 	"github.com/protoc-contrib/aip-go"
 )
 
-// requiredPaths returns the paths a *aip.RequiredError holds, or nil for a nil
-// error.
-func requiredPaths(err error) []protopath.Path {
-	if err == nil {
-		return nil
-	}
-	var required *aip.RequiredError
-	Expect(errors.As(err, &required)).To(BeTrue(), "%v is not a *aip.RequiredError", err)
-	Expect(required.Paths).NotTo(BeEmpty())
-	return required.Paths
-}
-
-// unsetFields returns the fields a *aip.RequiredError names, dotted and
+// unsetFields returns the fields a *aip.FieldBehaviorError names, dotted and
 // without the root step, or nil for a nil error.
 func unsetFields(err error) []string {
-	return dotted(requiredPaths(err))
-}
-
-// changedFields returns the fields an *aip.ImmutableError names, dotted and
-// without the root step, or nil for a nil error.
-func changedFields(err error) []string {
 	if err == nil {
 		return nil
 	}
-	var immutable *aip.ImmutableError
-	Expect(errors.As(err, &immutable)).To(BeTrue(), "%v is not an *aip.ImmutableError", err)
-	Expect(immutable.Paths).NotTo(BeEmpty())
-	return dotted(immutable.Paths)
+	var fields *aip.FieldBehaviorError
+	Expect(errors.As(err, &fields)).To(BeTrue(), "%v is not a *aip.FieldBehaviorError", err)
+	Expect(fields.Paths).NotTo(BeEmpty())
+	return dotted(fields.Paths)
 }
 
 // dotted renders paths as field names joined by dots, list indices in

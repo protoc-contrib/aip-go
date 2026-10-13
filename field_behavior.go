@@ -2,7 +2,10 @@ package aip
 
 import (
 	"fmt"
+	"iter"
+	"math/bits"
 	"strings"
+	"sync"
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
@@ -11,13 +14,13 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
-// FieldBehavior is the documented behavior of a field, as declared by the
+// FieldBehaviorKind is a documented behavior of a field, as declared by the
 // `google.api.field_behavior` annotation.
 //
 // See: https://google.aip.dev/203 (Field behavior documentation).
-type FieldBehavior = annotations.FieldBehavior
+type FieldBehaviorKind = annotations.FieldBehavior
 
-// The field behaviors, re-exported so that callers need not import
+// The field behavior kinds, re-exported so that callers need not import
 // google.golang.org/genproto/googleapis/api/annotations directly.
 const (
 	// Optional marks a field the client may omit.
@@ -38,51 +41,116 @@ const (
 	Identifier = annotations.FieldBehavior_IDENTIFIER
 )
 
-// FieldBehaviors returns the behaviors annotated on field.
-func FieldBehaviors(field protoreflect.FieldDescriptor) []FieldBehavior {
-	behaviors, ok := proto.GetExtension(field.Options(), annotations.E_FieldBehavior).([]FieldBehavior)
-	if !ok {
-		return nil
+// FieldBehaviorSet is a set of [FieldBehaviorKind] values: the behaviors a
+// field is annotated with, as [FieldBehaviorsOf] reads them. The zero value is
+// the empty set. Each kind is one bit, so a set is cheap to copy and compare.
+type FieldBehaviorSet uint16
+
+// FieldBehaviorsOf returns the behaviors field is annotated with in
+// `google.api.field_behavior`.
+//
+// The annotation is decoded once per descriptor and cached, so repeated calls
+// — one per field on every request — cost a map lookup. It is safe for
+// concurrent use.
+func FieldBehaviorsOf(field protoreflect.FieldDescriptor) FieldBehaviorSet {
+	if cached, ok := fieldBehaviorSets.Load(field); ok {
+		return cached.(FieldBehaviorSet)
 	}
-	return behaviors
+	var set FieldBehaviorSet
+	kinds, _ := proto.GetExtension(field.Options(), annotations.E_FieldBehavior).([]FieldBehaviorKind)
+	for _, kind := range kinds {
+		set |= fieldBehaviorBit(kind)
+	}
+	fieldBehaviorSets.Store(field, set)
+	return set
 }
 
-// HasFieldBehavior reports whether field is annotated with want.
-func HasFieldBehavior(field protoreflect.FieldDescriptor, want FieldBehavior) bool {
-	for _, behavior := range FieldBehaviors(field) {
-		if behavior == want {
+// fieldBehaviorSets caches [FieldBehaviorsOf] by field descriptor.
+var fieldBehaviorSets sync.Map
+
+// fieldBehaviorBit is kind's bit in a [FieldBehaviorSet], or none for a value
+// beyond the set's width.
+func fieldBehaviorBit(kind FieldBehaviorKind) FieldBehaviorSet {
+	if kind < 0 || kind >= fieldBehaviorSetWidth {
+		return 0
+	}
+	return 1 << kind
+}
+
+// fieldBehaviorSetWidth is the number of kinds a [FieldBehaviorSet] can hold.
+const fieldBehaviorSetWidth = 16
+
+// Has reports whether the set contains kind.
+func (s FieldBehaviorSet) Has(kind FieldBehaviorKind) bool {
+	bit := fieldBehaviorBit(kind)
+	return bit != 0 && s&bit != 0
+}
+
+// HasAny reports whether the set contains at least one of kinds.
+func (s FieldBehaviorSet) HasAny(kinds ...FieldBehaviorKind) bool {
+	for _, kind := range kinds {
+		if s.Has(kind) {
 			return true
 		}
 	}
 	return false
 }
 
-// ClearFields recursively clears every field annotated with any of behaviors.
-//
-// Call it on an inbound request with [OutputOnly] to drop server-owned values
-// a client should not be able to set, rather than rejecting the request:
-//
-//	aip.ClearFields(request.GetShipment(), aip.OutputOnly)
-//
-// See: https://google.aip.dev/161#output-only-fields.
-func ClearFields(message proto.Message, behaviors ...FieldBehavior) {
-	if len(behaviors) == 0 {
-		return
+// All yields the kinds in the set, in enum order.
+func (s FieldBehaviorSet) All() iter.Seq[FieldBehaviorKind] {
+	return func(yield func(FieldBehaviorKind) bool) {
+		for kind := FieldBehaviorKind(0); kind < fieldBehaviorSetWidth; kind++ {
+			if s.Has(kind) && !yield(kind) {
+				return
+			}
+		}
 	}
-	clearFields(message.ProtoReflect(), behaviors)
 }
 
-func clearFields(message protoreflect.Message, behaviors []FieldBehavior) {
+// String lists the kinds in enum order, e.g. "[REQUIRED IMMUTABLE]".
+func (s FieldBehaviorSet) String() string {
+	names := make([]string, 0, bits.OnesCount16(uint16(s)))
+	for kind := range s.All() {
+		names = append(names, kind.String())
+	}
+	return "[" + strings.Join(names, " ") + "]"
+}
+
+// ClearFields unsets every field of message annotated kind, at any depth:
+// through singular message fields, oneof members, and the elements of
+// repeated and map message fields. A field it clears is not descended into.
+// A nil or typed-nil message is left alone.
+//
+// It works on any message and any kind; which kinds a service clears, and
+// where, is its own policy. AIP-203 has a server clear OUTPUT_ONLY fields on
+// input, rather than reject them, and never return INPUT_ONLY ones:
+//
+//	aip.ClearFields(request, aip.OutputOnly)
+//	aip.ClearFields(response, aip.InputOnly)
+//
+// See: https://google.aip.dev/203#output-only.
+func ClearFields(message proto.Message, kind FieldBehaviorKind) {
+	if message == nil {
+		return
+	}
+	reflected := message.ProtoReflect()
+	if !reflected.IsValid() {
+		return
+	}
+	clearFields(reflected, kind)
+}
+
+func clearFields(message protoreflect.Message, kind FieldBehaviorKind) {
 	// Collect before clearing: mutating during Range is not permitted.
 	var clear []protoreflect.FieldDescriptor
 	message.Range(func(field protoreflect.FieldDescriptor, value protoreflect.Value) bool {
-		if hasAnyFieldBehavior(field, behaviors) {
+		if FieldBehaviorsOf(field).Has(kind) {
 			clear = append(clear, field)
 			// No point descending into a subtree that is about to be removed.
 			return true
 		}
 		rangeMessages(field, value, func(nested protoreflect.Message) {
-			clearFields(nested, behaviors)
+			clearFields(nested, kind)
 		})
 		return true
 	})
@@ -91,148 +159,96 @@ func clearFields(message protoreflect.Message, behaviors []FieldBehavior) {
 	}
 }
 
-// CopyFields copies every field annotated with any of behaviors from src to
-// dst, clearing those that are unset on src.
+// ValidateFields returns a [*FieldBehaviorError] naming the fields of message
+// annotated kind that are unset, as paths from message, in declaration order,
+// depth first; nil when there are none. It reads message and modifies nothing.
 //
-// Use it to restore server-owned values onto a message a client sent, after
-// [ClearFields] has removed whatever the client tried to set.
-func CopyFields(dst, src proto.Message, behaviors ...FieldBehavior) error {
-	dstReflect, srcReflect := dst.ProtoReflect(), src.ProtoReflect()
-	if dstReflect.Descriptor() != srcReflect.Descriptor() {
-		return fmt.Errorf(
-			"copy fields: dst is %s but src is %s",
-			dstReflect.Descriptor().FullName(), srcReflect.Descriptor().FullName(),
-		)
-	}
-	if len(behaviors) == 0 {
-		return nil
-	}
-	fields := dstReflect.Descriptor().Fields()
-	for i := range fields.Len() {
-		field := fields.Get(i)
-		if !hasAnyFieldBehavior(field, behaviors) {
-			continue
-		}
-		if isFieldPopulated(srcReflect, field) {
-			dstReflect.Set(field, srcReflect.Get(field))
-		} else {
-			dstReflect.Clear(field)
-		}
-	}
-	return nil
-}
-
-// ValidateRequiredFields returns a [*RequiredError] naming the fields of
-// resource annotated REQUIRED that are unset, as paths from resource, in
-// declaration order, depth first; nil when there are none. It reads resource
-// and modifies nothing.
+// The mask says which fields are checked:
 //
-// AIP-203 asks a different thing of a create and of a partial update, and the
-// mask says which one this is:
+//   - A nil mask checks every field, as a create must set every REQUIRED one.
+//     A nested message's annotations are independent of its parent's and apply
+//     only when the parent is set, so a set message field is checked in turn
+//     and an unset one is not.
+//   - A non-nil mask checks only the fields its paths name, as a partial update
+//     may omit a REQUIRED field its mask does not name but must set one it
+//     names, or the update would clear it. A path naming a message field covers
+//     the whole message: the field and, when it is set, everything beneath it
+//     are checked as with a nil mask. A nested path such as `carrier.name`
+//     checks just that field, as unset when `carrier` is: the update writes it
+//     either way. An empty mask names nothing and reports nothing.
 //
-//   - A nil mask is a create, which must set every REQUIRED field. A nested
-//     message's annotations are independent of its parent's and apply only
-//     when the parent is set, so a set message field is checked in turn and an
-//     unset one is not.
-//   - A non-nil mask is a partial update, which may omit a REQUIRED field the
-//     mask does not name; one it names must be set, or the update would clear
-//     it. A path naming a message field replaces the whole message, so the
-//     field and, when it is set, everything beneath it are checked as on
-//     create; a nested path such as `carrier.name` checks just that field.
-//     An empty mask names nothing and reports nothing.
+// The mask's paths are matched as written: "*" names no field, and a path that
+// names no field is ignored. A repeated or map field is checked itself but
+// never descended into, since a mask path cannot address its elements.
 //
-// An update that omitted its mask must have the implied mask filled in first,
-// with [ImplyUpdateMask]: `GetUpdateMask()` on such a request is nil, which
-// reads as a create and checks every field. [ValidateRequired] does both
-// for a whole request and needs no mask passed.
+// Unset is protobuf presence: a message, `optional` scalar or oneof member is
+// judged present or absent, so an explicit `false` satisfies a REQUIRED
+// `optional bool`, while a presence-less scalar is unset at its zero value — a
+// REQUIRED `bool` must be true, as AIP-203 says.
 //
-// The mask's paths are matched as written: "*" names no field here, so
-// expand it with [MutablePaths] first, and paths that name no field are
-// ignored — whether they are valid is protovalidate's `field_mask.in`. A
-// repeated or map field is checked itself but never descended into, since a
-// mask path cannot address its elements.
+// It works on any message and any kind; AIP-203 defines it for REQUIRED. On an
+// update, fill in an omitted mask with [ImpliedFieldMask] first: a nil mask
+// checks every field.
 //
-// Unset is protobuf presence, as [ImpliedUpdateMask] reads it: a message,
-// `optional` scalar or oneof member is judged present or absent, so an
-// explicit `false` satisfies a REQUIRED `optional bool`, while a presence-less
-// scalar is unset at its zero value — a REQUIRED `bool` must be true, as
-// AIP-203 says.
-//
-// protovalidate keeps a request's own fields — `parent`, the resource field
-// itself — and every value's format; this is for the resource's fields. A
-// resource message is shared by its create and update requests, and
-// protovalidate cannot tell which method it is validating, so REQUIRED on a
-// resource field is not something its rules can say:
-//
-//	if err := aip.ValidateRequiredFields(req.GetCollection(), req.GetUpdateMask()); err != nil {
+//	if err := aip.ValidateFields(req.GetBook(), aip.Required, req.GetUpdateMask()); err != nil {
 //		return status.Error(codes.InvalidArgument, err.Error())
 //	}
 //
-// A nil or typed-nil resource is valid.
+// A nil or typed-nil message is valid.
 //
 // See: https://google.aip.dev/203#required.
-func ValidateRequiredFields(resource proto.Message, mask *fieldmaskpb.FieldMask) error {
-	if resource == nil {
+func ValidateFields(message proto.Message, kind FieldBehaviorKind, mask *fieldmaskpb.FieldMask) error {
+	if message == nil {
 		return nil
 	}
-	message := resource.ProtoReflect()
-	if !message.IsValid() {
+	reflected := message.ProtoReflect()
+	if !reflected.IsValid() {
 		return nil
 	}
-	root := protopath.Path{protopath.Root(message.Descriptor())}
-	return newRequiredError(requiredPaths(message, root, mask))
-}
-
-// requiredPaths returns the REQUIRED fields of message that mask, nil for a
-// create, finds unset, as paths under at.
-func requiredPaths(message protoreflect.Message, at protopath.Path, mask *fieldmaskpb.FieldMask) []protopath.Path {
+	root := protopath.Path{protopath.Root(reflected.Descriptor())}
 	var paths []protopath.Path
-	for _, name := range missingRequiredPaths(message, "", mask != nil, mask.GetPaths(), nil) {
-		paths = append(paths, fieldPath(at, message.Descriptor(), name))
+	for _, name := range unsetPaths(reflected, kind, "", mask != nil, mask.GetPaths(), nil) {
+		paths = append(paths, fieldPath(root, reflected.Descriptor(), name))
 	}
-	return paths
+	if len(paths) == 0 {
+		return nil
+	}
+	return &FieldBehaviorError{Kind: kind, Paths: paths}
 }
 
-// RequiredError reports the fields annotated REQUIRED that a resource or
-// request leaves unset (AIP-203), as [ValidateRequiredFields] and
-// [ValidateRequired] return it. Get the paths with errors.As:
+// FieldBehaviorError reports the fields of one kind that failed a check, as
+// [ValidateFields] returns it. Get the paths with errors.As:
 //
-//	var required *aip.RequiredError
-//	if errors.As(err, &required) {
-//		for _, path := range required.Paths {
-//			// path.String(): "(acme.v1.CreateBookRequest).book.title"
+//	var fields *aip.FieldBehaviorError
+//	if errors.As(err, &fields) {
+//		for _, path := range fields.Paths {
+//			// path.String(): "(acme.v1.Book).author.name"
 //		}
 //	}
-type RequiredError struct {
-	// Paths are the unset fields, each from the message validated, in the
+type FieldBehaviorError struct {
+	// Kind is the behavior the fields are annotated with.
+	Kind FieldBehaviorKind
+	// Paths are the fields that failed, each from the message checked, in the
 	// order it holds them.
 	Paths []protopath.Path
 }
 
-// Error lists the unset fields, e.g.
-// "required fields are unset: book.title, book.author".
-func (e *RequiredError) Error() string {
-	return "required fields are unset: " + joinPaths(e.Paths)
+// Error lists the fields, e.g.
+// "REQUIRED fields are unset: title, author.name".
+func (e *FieldBehaviorError) Error() string {
+	return e.Kind.String() + " fields are unset: " + joinPaths(e.Paths)
 }
 
-// newRequiredError returns a [*RequiredError] for paths, or nil when there are
-// none.
-func newRequiredError(paths []protopath.Path) error {
-	if len(paths) == 0 {
-		return nil
-	}
-	return &RequiredError{Paths: paths}
-}
-
-// missingRequiredPaths appends to missing the REQUIRED fields of message that
-// are unset, each prefixed with prefix. Unless masked, every field is checked;
+// unsetPaths appends to unset the fields of message annotated kind that are
+// unset, each prefixed with prefix. Unless masked, every field is checked;
 // otherwise only those paths names, relative to message.
-func missingRequiredPaths(
+func unsetPaths(
 	message protoreflect.Message,
+	kind FieldBehaviorKind,
 	prefix string,
 	masked bool,
 	paths []string,
-	missing []string,
+	unset []string,
 ) []string {
 	fields := message.Descriptor().Fields()
 	for i := range fields.Len() {
@@ -245,23 +261,23 @@ func missingRequiredPaths(
 		if !whole && len(nested) == 0 {
 			continue
 		}
-		if whole && HasFieldBehavior(field, Required) && !isFieldPopulated(message, field) {
-			missing = append(missing, prefix+name)
+		if whole && FieldBehaviorsOf(field).Has(kind) && !isFieldPopulated(message, field) {
+			unset = append(unset, prefix+name)
 		}
 		if !isSingularMessage(field) {
 			continue
 		}
 		switch {
 		case whole && message.Has(field):
-			// Replaced wholesale, or created: check it as a create would.
-			missing = missingRequiredPaths(message.Get(field).Message(), prefix+name+".", false, nil, missing)
+			// Covered whole: check it as with a nil mask.
+			unset = unsetPaths(message.Get(field).Message(), kind, prefix+name+".", false, nil, unset)
 		case !whole:
 			// Only nested paths are named, and they are written whether or not
-			// the request sets the message, so an unset one reads as empty.
-			missing = missingRequiredPaths(message.Get(field).Message(), prefix+name+".", true, nested, missing)
+			// the message is set, so an unset one reads as empty.
+			unset = unsetPaths(message.Get(field).Message(), kind, prefix+name+".", true, nested, unset)
 		}
 	}
-	return missing
+	return unset
 }
 
 // maskedPaths reports whether paths names the field name itself, and returns
@@ -285,82 +301,20 @@ func isSingularMessage(field protoreflect.FieldDescriptor) bool {
 		(field.Kind() == protoreflect.MessageKind || field.Kind() == protoreflect.GroupKind)
 }
 
-// ValidateImmutable returns an [*ImmutableError] naming the top-level fields
-// annotated IMMUTABLE that update populates with a value different from the
-// one existing holds, as paths from update, in declaration order; nil when
-// there are none. It reads both messages and modifies neither.
-//
-// AIP-203: an IMMUTABLE field may be set on create and never changed
-// afterwards, and a service must reject a request that tries. A client echoing
-// the stored value back is not changing it, and a field update leaves unset is
-// not part of the request — neither is reported. Neither the implied update
-// mask nor the expansion of "*" includes an IMMUTABLE field, so without this
-// check a changed value would be dropped silently rather than refused:
-//
-//	stored, err := repository.Get(ctx, name)
-//	// ...
-//	if err := aip.ValidateImmutable(stored, req.GetCollection()); err != nil {
-//		return status.Error(codes.InvalidArgument, err.Error())
-//	}
-//
-// Values are compared as [proto.Equal] compares them, so a message, repeated
-// or map field is compared by content. A repeated field also annotated
-// UNORDERED_LIST is compared as a multiset — the same elements, each as often,
-// in any order — since AIP-203 lets the service reorder such a list, and a
-// client echoing it back in the order it was returned is not changing it. A
-// nil existing or update — or a typed nil — is valid. existing and update
-// must be the same message type; different types panic, as [proto.Merge]
-// does, since that is a programming error rather than something a request can
-// cause.
-//
-// See: https://google.aip.dev/203#immutable.
-func ValidateImmutable(existing, update proto.Message) error {
-	if existing == nil || update == nil {
-		return nil
+// fieldPath returns at extended with the fields the dotted name walks through,
+// starting from message.
+func fieldPath(at protopath.Path, message protoreflect.MessageDescriptor, name string) protopath.Path {
+	path := append(protopath.Path(nil), at...)
+	for segment := range strings.SplitSeq(name, ".") {
+		field := message.Fields().ByName(protoreflect.Name(segment))
+		path = append(path, protopath.FieldAccess(field))
+		message = field.Message()
 	}
-	existingReflect, updateReflect := existing.ProtoReflect(), update.ProtoReflect()
-	if !existingReflect.IsValid() || !updateReflect.IsValid() {
-		return nil
-	}
-	if existingReflect.Descriptor() != updateReflect.Descriptor() {
-		panic(fmt.Sprintf(
-			"validate immutable: existing is %s but update is %s",
-			existingReflect.Descriptor().FullName(), updateReflect.Descriptor().FullName(),
-		))
-	}
-	var changed []protopath.Path
-	root := protopath.Root(updateReflect.Descriptor())
-	fields := updateReflect.Descriptor().Fields()
-	for i := range fields.Len() {
-		field := fields.Get(i)
-		if !HasFieldBehavior(field, Immutable) || !updateReflect.Has(field) {
-			continue
-		}
-		if !fieldEqual(existingReflect, updateReflect, field) {
-			changed = append(changed, protopath.Path{root, protopath.FieldAccess(field)})
-		}
-	}
-	if len(changed) == 0 {
-		return nil
-	}
-	return &ImmutableError{Paths: changed}
-}
-
-// ImmutableError reports the IMMUTABLE fields an update changes (AIP-203), as
-// [ValidateImmutable] returns it. Get the paths with errors.As, as for
-// [RequiredError].
-type ImmutableError struct {
-	// Paths are the changed fields, each from the update, in declaration order.
-	Paths []protopath.Path
-}
-
-// Error lists the changed fields, e.g. "immutable fields cannot change: sku".
-func (e *ImmutableError) Error() string {
-	return "immutable fields cannot change: " + joinPaths(e.Paths)
+	return path
 }
 
 // joinPaths renders paths as a comma-separated list of dotted paths, each
-// without its root step: `book.title`, `requests[1].book.author`.
+// without its root step: `title`, `author.name`.
 func joinPaths(paths []protopath.Path) string {
 	rendered := make([]string, len(paths))
 	for i, path := range paths {
@@ -370,7 +324,7 @@ func joinPaths(paths []protopath.Path) string {
 }
 
 // dottedPath renders path as field names joined by dots, list indices in
-// brackets, without its root step: `requests[1].book.title`.
+// brackets, without its root step: `stops[1].city`.
 func dottedPath(path protopath.Path) string {
 	var b strings.Builder
 	for _, step := range path {
@@ -385,47 +339,6 @@ func dottedPath(path protopath.Path) string {
 		}
 	}
 	return b.String()
-}
-
-// fieldEqual reports whether a and b hold the same value for field, compared
-// as [proto.Equal] compares it: each value is copied alone into a fresh message
-// of the type, so scalars, messages, lists and maps all get proto.Equal's
-// semantics without restating them here. An UNORDERED_LIST field is compared
-// as a multiset instead.
-func fieldEqual(a, b protoreflect.Message, field protoreflect.FieldDescriptor) bool {
-	if field.IsList() && HasFieldBehavior(field, UnorderedList) {
-		return unorderedEqual(a.Get(field).List(), b.Get(field).List())
-	}
-	only := func(m protoreflect.Message) proto.Message {
-		single := m.New()
-		if m.Has(field) {
-			single.Set(field, m.Get(field))
-		}
-		return single.Interface()
-	}
-	return proto.Equal(only(a), only(b))
-}
-
-// unorderedEqual reports whether a and b hold the same elements, each as
-// often, in any order, comparing elements as [proto.Equal] does.
-func unorderedEqual(a, b protoreflect.List) bool {
-	if a.Len() != b.Len() {
-		return false
-	}
-	matched := make([]bool, b.Len())
-	for i := range a.Len() {
-		found := false
-		for j := range b.Len() {
-			if !matched[j] && a.Get(i).Equal(b.Get(j)) {
-				matched[j], found = true, true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
 }
 
 // rangeMessages invokes fn for every message reachable through field, whether
@@ -456,15 +369,6 @@ func rangeMessages(
 	case field.Kind() == protoreflect.MessageKind, field.Kind() == protoreflect.GroupKind:
 		fn(value.Message())
 	}
-}
-
-func hasAnyFieldBehavior(field protoreflect.FieldDescriptor, behaviors []FieldBehavior) bool {
-	for _, behavior := range behaviors {
-		if HasFieldBehavior(field, behavior) {
-			return true
-		}
-	}
-	return false
 }
 
 // isFieldPopulated reports whether field carries a value on message.
