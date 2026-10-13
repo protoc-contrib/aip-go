@@ -1,47 +1,38 @@
 // Package aip implements the Google API Improvement Proposals in Go.
 //
 // Everything lives in this one package, so a server reads as
-// `aip.ClearFields`, `aip.IsFullReplacement`, `aip.ResourcePattern` rather
-// than a handful of one-type imports. Names are prefixed by the AIP concept
-// they belong to, not by a package path.
+// `aip.ClearFields`, `aip.ValidateFields`, `aip.ResourcePattern` rather than a
+// handful of one-type imports. Names are prefixed by the AIP concept they
+// belong to, not by a package path.
 //
 // The AIPs implemented here:
 //
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
-//   - AIP-133 create — [ImplyResourceName] to assign an omitted id and build
-//     the resource's name on a whole request
-//   - AIP-134 field masks — [IsFullReplacement] and [MutablePaths] for "*",
-//     [ImpliedUpdateMask] for an omitted mask, and [ImplyUpdateMask] to fill
-//     one in on a whole request; [ImplyRequest] runs both implications
-//   - AIP-203 field behavior — [ClearFields], [CopyFields],
-//     [ValidateRequiredFields] to enforce REQUIRED on a create or an update,
-//     [ValidateRequired] to do so on a whole request, and
-//     [ValidateImmutable] to refuse a changed IMMUTABLE value; they return a
-//     [*RequiredError] or [*ImmutableError] holding the fields' paths
+//   - AIP-134 field masks — [ImpliedFieldMask] for an update's omitted mask
+//   - AIP-203 field behavior — [ClearFields] to unset the fields of a
+//     [FieldBehaviorKind], [ValidateFields] to report the ones left unset, as
+//     a [*FieldBehaviorError] holding their paths; [FieldBehaviorsOf] reads a
+//     field's annotation into a [FieldBehaviorSet], cached per descriptor
 //
-// The request-level functions recognise the AIP standard method requests by
-// their shape: a create (AIP-133) carries its resource in the field whose type
-// declares google.api.resource, an update (AIP-134) also has an update_mask,
-// and a batch (AIP-233, AIP-235) carries such requests in `requests`. A server
-// runs [ClearFields] with [OutputOnly], then [ImplyRequest], then
-// [ValidateRequired], on every request.
+// The field behavior functions are primitives: they work on any message and
+// any kind, and which kinds a service applies, and where, is its own policy.
+// AIP-203 defines three uses — clear OUTPUT_ONLY fields on input, clear
+// INPUT_ONLY fields on output, and validate REQUIRED fields: every one on a
+// create, only the ones the update_mask names on a partial update:
 //
-// This stack is deliberately stricter than AIP-161 about update masks. AIP-161
-// has a mask that names an OUTPUT_ONLY field ignored; here protovalidate's
-// `field_mask.in` lists only the writable fields, so such a mask is rejected
-// with InvalidArgument — a clearer answer than a silent no-op, and one that
-// protoc-gen-aip-lint's update-mask-writable-fields rule keeps in step with
-// `google.api.field_behavior`. A changed IMMUTABLE value is an error too
-// ([ValidateImmutable]), rather than dropped by the implied mask or by "*".
+//	aip.ClearFields(req, aip.OutputOnly)
+//	err := aip.ValidateFields(req.GetBook(), aip.Required, req.GetUpdateMask())
+//	aip.ClearFields(resp, aip.InputOnly)
+//
+// Which field of a request holds the resource, and whether it is a create or
+// an update, is the caller's to say: nothing here recognises request shapes.
 //
 // Validation is split with protovalidate. A request's own fields — `parent`,
 // the resource field itself — every value's format, and whether an
 // update_mask names real fields stay protovalidate's rules: `required`,
 // `min_len`, `field_mask.in`. REQUIRED on a resource's own fields is
-// [ValidateRequiredFields]'s: a resource message is shared by its create and
-// update requests, a create must set every REQUIRED field while an update need
-// only set the ones its mask names, and protovalidate cannot tell which method
-// it is validating. Per-request CEL rules were the workaround this replaces.
+// [ValidateFields]': a resource message is shared by its create and update
+// requests, and protovalidate cannot tell which method it is validating.
 //
 // Ordering (AIP-132), pagination (AIP-158) and filtering (AIP-160) are
 // deliberately absent. A page token or cursor is only meaningful against the
