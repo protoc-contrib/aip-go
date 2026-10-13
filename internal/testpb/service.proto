@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+// Fixtures for the request walker and FieldBehaviorInterceptor: AIP standard
+// method requests over a top-level and a nested resource, and a service that
+// carries them, unary and streaming.
+package tests;
+
+import "buf/validate/validate.proto";
+import "google/api/field_behavior.proto";
+import "google/api/resource.proto";
+import "google/protobuf/field_mask.proto";
+import "internal/testpb/test.proto";
+
+option go_package = "github.com/protoc-contrib/aip-go/internal/testpb";
+
+// BookService exercises FieldBehaviorInterceptor: unary standard methods, and
+// a bidirectional stream.
+service BookService {
+  rpc CreateBook(CreateBookRequest) returns (Book);
+  rpc UpdateBook(UpdateBookRequest) returns (Book);
+  rpc BatchCreateBooks(BatchCreateBooksRequest) returns (BatchCreateBooksResponse);
+  rpc GetBook(GetBookRequest) returns (Book);
+  rpc SyncBooks(stream Book) returns (stream Book);
+}
+
+// Book is a top-level resource: its name is `books/<id>`.
+message Book {
+  option (google.api.resource) = {
+    type: "tests.example.com/Book"
+    pattern: "books/{book}"
+    singular: "book"
+    plural: "books"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string title = 2 [(google.api.field_behavior) = REQUIRED];
+  string author = 3 [(google.api.field_behavior) = REQUIRED];
+  string notes = 4 [(google.api.field_behavior) = OPTIONAL];
+  Carrier courier = 5 [(google.api.field_behavior) = OPTIONAL];
+  // Server-owned: cleared from what a client sends.
+  string etag = 6 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // Client-owned: cleared from what the server returns.
+  string request_token = 7 [(google.api.field_behavior) = INPUT_ONLY];
+}
+
+// CreateBookRequest is an AIP-133 create with a user-specified id.
+message CreateBookRequest {
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (buf.validate.field).string.pattern = "^shelves/[a-z0-9-]+$"
+  ];
+  string book_id = 2 [(google.api.field_behavior) = OPTIONAL];
+  Book book = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// UpdateBookRequest is an AIP-134 update.
+message UpdateBookRequest {
+  Book book = 1 [(google.api.field_behavior) = REQUIRED];
+  google.protobuf.FieldMask update_mask = 2 [(google.api.field_behavior) = OPTIONAL];
+}
+
+// BatchCreateBooksRequest is an AIP-233 batch create.
+message BatchCreateBooksRequest {
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+  repeated CreateBookRequest requests = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// BatchCreateBooksResponse returns the Books a batch created.
+message BatchCreateBooksResponse {
+  repeated Book books = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// BatchUpdateBooksRequest is an AIP-235 batch update.
+message BatchUpdateBooksRequest {
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+  repeated UpdateBookRequest requests = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// GetBookRequest writes nothing: the walker yields nothing for it.
+message GetBookRequest {
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Chapter is a resource under a Book: its name is built under the create
+// request's parent, which is also copied onto it.
+message Chapter {
+  option (google.api.resource) = {
+    type: "tests.example.com/Chapter"
+    pattern: "books/{book}/chapters/{chapter}"
+    singular: "chapter"
+    plural: "chapters"
+  };
+
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+  string parent = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string title = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// CreateChapterRequest is an AIP-133 create of a nested resource.
+message CreateChapterRequest {
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+  string chapter_id = 2 [(google.api.field_behavior) = OPTIONAL];
+  Chapter chapter = 3 [(google.api.field_behavior) = REQUIRED];
+}
+
+// ImportBookRequest carries a Book with no `book_id`: a create the server
+// names some other way.
+message ImportBookRequest {
+  Book book = 1 [(google.api.field_behavior) = REQUIRED];
+}

@@ -8,6 +8,7 @@
 // The AIPs implemented here:
 //
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
+//   - AIP-133, AIP-134, AIP-233, AIP-235 request shapes — [ResourceWrites]
 //   - AIP-134 field masks — [ImpliedFieldMask] for an update's omitted mask
 //   - AIP-203 field behavior — [ClearFields] to unset the fields of a
 //     [FieldBehaviorKind], [ValidateFields] to report the ones left unset, as
@@ -24,8 +25,19 @@
 //	err := aip.ValidateFields(req.GetBook(), aip.Required, req.GetUpdateMask())
 //	aip.ClearFields(resp, aip.InputOnly)
 //
-// Which field of a request holds the resource, and whether it is a create or
-// an update, is the caller's to say: nothing here recognises request shapes.
+// [ResourceWrites] recognises the AIP standard method request shapes — a create
+// (AIP-133), an update (AIP-134), a batch of either (AIP-233, AIP-235) — and
+// yields the resources a request writes, with their create id or update
+// mask. [FieldBehaviorInterceptor] is a connect.Interceptor applying
+// it all on the server with fixed behavior: on a unary RPC, clear OUTPUT_ONLY,
+// fill in a create's omitted id and an update's omitted mask, validate with
+// protovalidate and REQUIRED as one InvalidArgument error, and clear
+// INPUT_ONLY from the response; on a stream, clear OUTPUT_ONLY on every
+// message received and INPUT_ONLY on every message sent. For another policy,
+// build an interceptor from the primitives and [ResourceWrites]. A create's
+// name is the server's to build from the request's `parent` and its id
+// (AIP-133): the handler reads both from the request, and the name a response
+// returns comes from storage.
 //
 // Validation is split with protovalidate. A request's own fields — `parent`,
 // the resource field itself — every value's format, and whether an
