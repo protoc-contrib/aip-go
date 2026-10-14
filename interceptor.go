@@ -146,13 +146,13 @@ func implyRequest(request proto.Message) {
 // [*protovalidate.ValidationError] with a buf.validate.Violations detail. A
 // rule that fails to compile or evaluate is the server's fault: Internal,
 // with the fixed message "validation failed" and the diagnostic only under it
-// (see ruleError).
+// (see opaque).
 func (i *FieldBehaviorInterceptor) validate(request proto.Message) error {
 	var violations []*protovalidate.Violation
 	if err := i.validator.Validate(request); err != nil {
 		var verr *protovalidate.ValidationError
 		if !errors.As(err, &verr) {
-			return connect.NewError(connect.CodeInternal, &ruleError{cause: err})
+			return connect.NewError(connect.CodeInternal, &opaque{message: "validation failed", cause: err})
 		}
 		violations = verr.Violations
 	}
@@ -230,15 +230,15 @@ func fieldPathElement(field protoreflect.FieldDescriptor) *validatepb.FieldPathE
 	}.Build()
 }
 
-// ruleError reports a validation rule that failed to compile or evaluate. Its
-// message is fixed, so protovalidate's diagnostic -- the rule's expression,
-// the field it ran on -- never reaches a client, and the diagnostic stays
-// reachable through Unwrap for the server's own log: errors.As finds the
-// [*protovalidate.CompilationError] or [*protovalidate.RuntimeError] under it.
-type ruleError struct {
-	cause error
+// opaque is an error whose message is fixed and whose cause is hidden from
+// it: the client sees only message, and errors.As still reaches cause -- for a
+// rule that failed to compile or evaluate, the [*protovalidate.CompilationError]
+// or [*protovalidate.RuntimeError] -- for the server's own log.
+type opaque struct {
+	message string
+	cause   error
 }
 
-func (e *ruleError) Error() string { return "validation failed" }
+func (e *opaque) Error() string { return e.message }
 
-func (e *ruleError) Unwrap() error { return e.cause }
+func (e *opaque) Unwrap() error { return e.cause }
