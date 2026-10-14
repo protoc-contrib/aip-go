@@ -144,13 +144,15 @@ func implyRequest(request proto.Message) {
 // REQUIRED field of the resources it writes unset, and otherwise one
 // InvalidArgument error holding every violation, protovalidate's first, as a
 // [*protovalidate.ValidationError] with a buf.validate.Violations detail. A
-// rule that fails to compile or evaluate is the server's fault: Internal.
+// rule that fails to compile or evaluate is the server's fault: Internal,
+// with the fixed message "validation failed" and the diagnostic only under it
+// (see ruleError).
 func (i *FieldBehaviorInterceptor) validate(request proto.Message) error {
 	var violations []*protovalidate.Violation
 	if err := i.validator.Validate(request); err != nil {
 		var verr *protovalidate.ValidationError
 		if !errors.As(err, &verr) {
-			return connect.NewError(connect.CodeInternal, err)
+			return connect.NewError(connect.CodeInternal, &ruleError{cause: err})
 		}
 		violations = verr.Violations
 	}
@@ -227,3 +229,16 @@ func fieldPathElement(field protoreflect.FieldDescriptor) *validatepb.FieldPathE
 		FieldType:   descriptorpb.FieldDescriptorProto_Type(field.Kind()).Enum(),
 	}.Build()
 }
+
+// ruleError reports a validation rule that failed to compile or evaluate. Its
+// message is fixed, so protovalidate's diagnostic -- the rule's expression,
+// the field it ran on -- never reaches a client, and the diagnostic stays
+// reachable through Unwrap for the server's own log: errors.As finds the
+// [*protovalidate.CompilationError] or [*protovalidate.RuntimeError] under it.
+type ruleError struct {
+	cause error
+}
+
+func (e *ruleError) Error() string { return "validation failed" }
+
+func (e *ruleError) Unwrap() error { return e.cause }
