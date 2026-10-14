@@ -1,12 +1,11 @@
 module github.com/protoc-contrib/aip-go
 
-go 1.26.0
+go 1.27.0
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.4.0
 	connectrpc.com/connect v1.21.0
-	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.43.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260831171406-18b4a7587f8a
