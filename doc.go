@@ -8,7 +8,7 @@
 // The AIPs implemented here:
 //
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
-//   - AIP-133, AIP-134, AIP-233, AIP-235 request shapes — [ResourceWrites]
+//   - AIP-133, AIP-134, AIP-233, AIP-234 request shapes — [ResourceWrites]
 //   - AIP-134 field masks — [ImpliedFieldMask] for an update's omitted mask,
 //     [ClearFieldMask] to remove the paths of a kind, such as OUTPUT_ONLY, from
 //     an explicit one
@@ -28,7 +28,7 @@
 //	aip.ClearFields(resp, aip.InputOnly)
 //
 // [ResourceWrites] recognises the AIP standard method request shapes — a create
-// (AIP-133), an update (AIP-134), a batch of either (AIP-233, AIP-235) — and
+// (AIP-133), an update (AIP-134), a batch of either (AIP-233, AIP-234) — and
 // yields the resources a request writes, with their create id or update
 // mask. [FieldBehaviorInterceptor] is a connect.Interceptor applying
 // it all on the server with fixed behavior: on a unary RPC, clear OUTPUT_ONLY,
