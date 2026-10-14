@@ -22,6 +22,7 @@ var _ = Describe("ResourcePattern", func() {
 			Entry("singleton, trailing literal", "projects/{project}/settings", 1, []string{"project"}),
 			Entry("all literal", "projects/defaults", 0, []string{}),
 			Entry("leading variable", "{organization}/items/{item}", 2, []string{"organization", "item"}),
+			Entry("camelCase literal, snake_case variables", "billingAccounts/{billing_account}/logs/{log2}", 2, []string{"billing_account", "log2"}),
 		)
 
 		DescribeTable("rejects invalid patterns",
@@ -37,6 +38,18 @@ var _ = Describe("ResourcePattern", func() {
 			Entry("brace inside literal", "th{ings/x", "malformed segment"),
 			Entry("nested braces", "things/{a{b}}", "malformed segment"),
 			Entry("duplicate variable", "a/{x}/b/{x}", `duplicate variable "x"`),
+			// AIP-122: collection identifiers are camelCase.
+			Entry("capitalized literal", "Publishers/{id}", `literal "Publishers" is not a camelCase collection identifier`),
+			Entry("snake_case literal", "book_shelves/{id}", `literal "book_shelves" is not a camelCase collection identifier`),
+			Entry("kebab-case literal", "book-shelves/{id}", `literal "book-shelves" is not a camelCase collection identifier`),
+			Entry("literal with a space", "a b/{id}", `literal "a b" is not a camelCase collection identifier`),
+			Entry("literal starting with a digit", "1books/{id}", `literal "1books" is not a camelCase collection identifier`),
+			// AIP-123: pattern variables are snake_case.
+			Entry("path wildcard", "books/{book=**}", `variable name "book=**" is not snake_case`),
+			Entry("variable with a space", "books/{pub lisher}", `variable name "pub lisher" is not snake_case`),
+			Entry("camelCase variable", "books/{billingAccount}", `variable name "billingAccount" is not snake_case`),
+			Entry("variable starting with an underscore", "books/{_book}", `variable name "_book" is not snake_case`),
+			Entry("variable starting with a digit", "books/{1book}", `variable name "1book" is not snake_case`),
 		)
 	})
 
