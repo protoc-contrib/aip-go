@@ -93,7 +93,7 @@ func (u *ResourceUpdate) SetMask(mask *fieldmaskpb.FieldMask) {
 //   - An update (AIP-134) is a request whose type also has an `update_mask`
 //     google.protobuf.FieldMask field; its ResourceWrite has Update set, even when the
 //     mask is unset.
-//   - A batch (AIP-233, AIP-235) carries such requests in a repeated
+//   - A batch (AIP-233, AIP-234) carries such requests in a repeated
 //     `requests` field; each entry yields its own ResourceWrite, under `requests[i]`.
 //
 // Any other request yields nothing, and so does an unset resource: there is

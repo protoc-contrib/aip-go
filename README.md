@@ -28,7 +28,7 @@ concept, not by a package path.
 | [203](https://google.aip.dev/203#required) | fields of a kind left unset (`REQUIRED`), per create or update | ✅ `ValidateFields` |
 | [203](https://google.aip.dev/203#required) | `REQUIRED` on a request's own fields | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
-| [133](https://google.aip.dev/133), [134](https://google.aip.dev/134), [233](https://google.aip.dev/233), [235](https://google.aip.dev/235) | standard-method request shapes | ✅ `ResourceWrites` |
+| [133](https://google.aip.dev/133), [134](https://google.aip.dev/134), [233](https://google.aip.dev/233), [234](https://google.aip.dev/234) | standard-method request shapes | ✅ `ResourceWrites` |
 | — | Connect interceptor applying all of the above | ✅ `FieldBehaviorInterceptor` |
 
 ## Ordering, pagination and filtering
@@ -137,7 +137,7 @@ request's shape, not its values, says what it is: a create (AIP-133) carries its
 resource in the singular field whose type declares `google.api.resource`; an
 update (AIP-134) also has an `update_mask` `google.protobuf.FieldMask` field, so
 an unset mask names nothing rather than turning it into a create; a batch
-(AIP-233, AIP-235) carries such requests in `requests`, each yielded under
+(AIP-233, AIP-234) carries such requests in `requests`, each yielded under
 `requests[i]`. Each `ResourceWrite` has the resource, its path, and either a
 `ResourceCreate` (the `<resource>_id`) or a `ResourceUpdate` (the
 `update_mask`).
