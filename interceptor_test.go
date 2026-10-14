@@ -207,6 +207,24 @@ var _ = Describe("FieldBehaviorInterceptor", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("ignores the OUTPUT_ONLY fields an explicit mask names, rather than refusing them", func(ctx SpecContext) {
+			_, err := client.UpdateBook(ctx, connect.NewRequest(&testpb.UpdateBookRequest{
+				Book:       &testpb.Book{Name: "books/dune", Notes: "a classic", Etag: "client-etag"},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"etag", "notes", "courier.tracking_id"}},
+			}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(service.last().(*testpb.UpdateBookRequest).GetUpdateMask().GetPaths()).To(Equal([]string{"notes"}))
+		})
+
+		It("leaves a mask that names only OUTPUT_ONLY fields empty, rather than implying one", func(ctx SpecContext) {
+			_, err := client.UpdateBook(ctx, connect.NewRequest(&testpb.UpdateBookRequest{
+				Book:       &testpb.Book{Name: "books/dune", Notes: "a classic"},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"etag"}},
+			}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(service.last().(*testpb.UpdateBookRequest).GetUpdateMask().GetPaths()).To(BeEmpty())
+		})
+
 		It("refuses a partial update that clears a REQUIRED field its mask names", func(ctx SpecContext) {
 			_, err := client.UpdateBook(ctx, connect.NewRequest(&testpb.UpdateBookRequest{
 				Book:       &testpb.Book{Name: "books/dune"},

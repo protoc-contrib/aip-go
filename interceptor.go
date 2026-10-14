@@ -22,7 +22,8 @@ import (
 //     what AIP leaves to the server on each resource the request writes
 //     ([ResourceWrites]) — a create's omitted `<resource>_id` becomes a UUIDv7
 //     (AIP-133), an update's omitted mask becomes [ImpliedFieldMask]
-//     (AIP-134); then validates the request with
+//     (AIP-134), and the OUTPUT_ONLY paths of an update's explicit mask are
+//     removed with [ClearFieldMask] (AIP-203); then validates the request with
 //     protovalidate and reports every REQUIRED field each resource leaves unset
 //     — all of them on a create, those the mask names on an update — in one
 //     [connect.CodeInvalidArgument] error carrying the violations as a
@@ -36,7 +37,8 @@ import (
 // It acts on the server only; a client passes through untouched. Clearing
 // changes the messages in place, including the response the handler returns
 // and every message it sends. For a different policy, build an interceptor
-// from [ClearFields], [ValidateFields], [ImpliedFieldMask] and [ResourceWrites].
+// from [ClearFields], [ValidateFields], [ImpliedFieldMask], [ClearFieldMask]
+// and [ResourceWrites].
 type FieldBehaviorInterceptor struct {
 	validator protovalidate.Validator
 }
@@ -113,7 +115,10 @@ func (c *fieldBehaviorConn) Send(message any) error {
 }
 
 // implyRequest fills in what AIP leaves to the server on each resource request
-// writes: a create's omitted id, an update's omitted mask. A create's name is
+// writes: a create's omitted id, an update's omitted mask. An update's explicit
+// mask loses its OUTPUT_ONLY paths, which AIP-203 has a server ignore rather
+// than reject; a mask left empty by that writes nothing, and is not implied
+// instead. A create's name is
 // the server's to build from the request's `parent` and that id (AIP-133):
 // the handler reads both from the request, and the name a response returns
 // comes from storage.
@@ -125,8 +130,11 @@ func implyRequest(request proto.Message) {
 				write.Create.SetID(uuid.Must(uuid.NewV7()).String())
 			}
 		case write.Update != nil:
-			if len(write.Update.Mask().GetPaths()) == 0 {
+			if mask := write.Update.Mask(); len(mask.GetPaths()) == 0 {
 				write.Update.SetMask(ImpliedFieldMask(write.Resource))
+			} else {
+				ClearFieldMask(write.Resource, OutputOnly, mask)
+				write.Update.SetMask(mask)
 			}
 		}
 	}

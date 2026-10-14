@@ -1,6 +1,9 @@
 package aip
 
 import (
+	"slices"
+	"strings"
+
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -53,6 +56,55 @@ func ImpliedFieldMask(message proto.Message) *fieldmaskpb.FieldMask {
 		}
 	}
 	return mask
+}
+
+// ClearFieldMask removes from mask the paths that name, or pass through, a
+// field of message annotated kind, keeping the rest in the order mask holds
+// them. It modifies mask in place, as [ClearFields] modifies a message, and
+// reads message only for its schema.
+//
+// A path is walked segment by segment, through singular message fields, so
+// `carrier.tracking_id` is removed when either `carrier` or `tracking_id` is
+// annotated kind. A path that names no field, such as "*", is kept as written:
+// whether it applies is the mask's own validation to decide.
+//
+// A nil mask is left alone. A nil message names no fields, so every path is
+// kept.
+//
+// AIP-203 has a server ignore OUTPUT_ONLY fields an update mask names rather
+// than reject the update:
+//
+//	if len(req.GetUpdateMask().GetPaths()) > 0 {
+//		aip.ClearFieldMask(req.GetBook(), aip.OutputOnly, req.GetUpdateMask())
+//	}
+//
+// See: https://google.aip.dev/203#output-only.
+func ClearFieldMask(message proto.Message, kind FieldBehaviorKind, mask *fieldmaskpb.FieldMask) {
+	if message == nil || mask == nil {
+		return
+	}
+	root := message.ProtoReflect().Descriptor()
+	mask.Paths = slices.DeleteFunc(mask.Paths, func(path string) bool {
+		// Walk the path from root; a segment that names no field ends it.
+		desc := root
+		for segment := range strings.SplitSeq(path, ".") {
+			if desc == nil {
+				return false
+			}
+			field := desc.Fields().ByName(protoreflect.Name(segment))
+			if field == nil {
+				return false
+			}
+			if FieldBehaviorsOf(field).Has(kind) {
+				return true
+			}
+			desc = nil
+			if isSingularMessage(field) {
+				desc = field.Message()
+			}
+		}
+		return false
+	})
 }
 
 // isWritable reports whether an update may write field. OUTPUT_ONLY is the
