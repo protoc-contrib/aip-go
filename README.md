@@ -24,6 +24,7 @@ concept, not by a package path.
 | [134](https://google.aip.dev/134) | implied field mask | ✅ `ImpliedFieldMask` |
 | [134](https://google.aip.dev/134) | `update_mask` validation | not here — protovalidate `field_mask.in` |
 | [203](https://google.aip.dev/203) | field behavior: clearing any kind | ✅ `ClearFields` |
+| [203](https://google.aip.dev/203#output-only) | `OUTPUT_ONLY` paths in an update mask, ignored | ✅ `ClearFieldMask` |
 | [203](https://google.aip.dev/203#required) | fields of a kind left unset (`REQUIRED`), per create or update | ✅ `ValidateFields` |
 | [203](https://google.aip.dev/203#required) | `REQUIRED` on a request's own fields | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
@@ -62,6 +63,7 @@ for kind := range behaviors.All() { /* enum order */ }
 | `ClearFields(m, kind)` | unsets every field annotated `kind` |
 | `ValidateFields(m, kind, mask)` | a `*aip.FieldBehaviorError` naming the fields annotated `kind` that are unset — all of them for a nil mask, only those the mask names otherwise |
 | `ImpliedFieldMask(m)` | the field mask AIP-134 implies when an update omits one |
+| `ClearFieldMask(m, kind, mask)` | removes from `mask` the paths that name, or pass through, a field annotated `kind` |
 | `FieldBehaviorsOf(fd)` | the field's annotation, as a `FieldBehaviorSet` — `Has`, `HasAny`, `All`, `String` — decoded once per descriptor and cached; safe for concurrent use |
 
 AIP-203 defines three uses, and a server typically makes them in this order:
@@ -69,9 +71,12 @@ AIP-203 defines three uses, and a server typically makes them in this order:
 ```go
 aip.ClearFields(req, aip.OutputOnly) // server-owned values never reach the mask
 
-// update: an omitted mask is implied from the writable fields set
+// update: an omitted mask is implied from the writable fields set, and an
+// explicit one ignores the OUTPUT_ONLY fields it names
 if len(req.GetUpdateMask().GetPaths()) == 0 {
 	req.UpdateMask = aip.ImpliedFieldMask(req.GetBook())
+} else {
+	aip.ClearFieldMask(req.GetBook(), aip.OutputOnly, req.GetUpdateMask())
 }
 
 // REQUIRED: a nil mask (create) checks every field, a mask only the ones it names
@@ -142,7 +147,7 @@ server, with fixed behavior:
 
 | RPC | Request | Response |
 | --- | --- | --- |
-| unary | clear `OUTPUT_ONLY`; on a create, an omitted `<resource>_id` becomes a UUIDv7; on an update, an omitted mask becomes `ImpliedFieldMask`; then protovalidate plus `REQUIRED` (every field on a create, the masked ones on an update), as one `InvalidArgument` with a `buf.validate.Violations` detail | clear `INPUT_ONLY` |
+| unary | clear `OUTPUT_ONLY`; on a create, an omitted `<resource>_id` becomes a UUIDv7; on an update, an omitted mask becomes `ImpliedFieldMask` and an explicit one drops its `OUTPUT_ONLY` paths (`ClearFieldMask`); then protovalidate plus `REQUIRED` (every field on a create, the masked ones on an update), as one `InvalidArgument` with a `buf.validate.Violations` detail | clear `INPUT_ONLY` |
 | streaming | clear `OUTPUT_ONLY` on every message received | clear `INPUT_ONLY` on every message sent |
 
 Streams have no standard-method shape, so nothing is filled in or validated on
@@ -169,7 +174,7 @@ violation — rule id `required`, message `value is required` — in the same er
 as the request's protovalidate violations: `validation error: book.title: value
 is required`. For a different policy — other kinds, IMMUTABLE cleared on update,
 another id scheme — build an interceptor from `ClearFields`, `ValidateFields`,
-`ImpliedFieldMask` and `ResourceWrites`; `ResourceCreate.SetID` sets an id of
+`ImpliedFieldMask`, `ClearFieldMask` and `ResourceWrites`; `ResourceCreate.SetID` sets an id of
 your own scheme.
 
 ## Resource names

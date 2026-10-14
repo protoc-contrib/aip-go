@@ -9,7 +9,9 @@
 //
 //   - AIP-122 resource names — [ResourcePattern], [ResourceName]
 //   - AIP-133, AIP-134, AIP-233, AIP-235 request shapes — [ResourceWrites]
-//   - AIP-134 field masks — [ImpliedFieldMask] for an update's omitted mask
+//   - AIP-134 field masks — [ImpliedFieldMask] for an update's omitted mask,
+//     [ClearFieldMask] to remove the paths of a kind, such as OUTPUT_ONLY, from
+//     an explicit one
 //   - AIP-203 field behavior — [ClearFields] to unset the fields of a
 //     [FieldBehaviorKind], [ValidateFields] to report the ones left unset, as
 //     a [*FieldBehaviorError] holding their paths; [FieldBehaviorsOf] reads a
