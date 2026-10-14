@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"uuid"
 
 	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
@@ -137,7 +137,8 @@ var _ = Describe("FieldBehaviorInterceptor", func() {
 			request := service.last().(*testpb.CreateBookRequest)
 			id, err := uuid.Parse(request.GetBookId())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(id.Version()).To(Equal(uuid.Version(7)))
+			// The version is the high nibble of byte 6 (RFC 9562).
+			Expect(id[6] >> 4).To(Equal(byte(7)))
 			Expect(request.GetParent()).To(Equal("shelves/a"))
 			Expect(request.GetBook().GetName()).To(Equal("books/sent"))
 		})

@@ -3,11 +3,11 @@ package aip
 import (
 	"context"
 	"errors"
+	"uuid"
 
 	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protopath"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -127,7 +127,7 @@ func implyRequest(request proto.Message) {
 		switch {
 		case write.Create != nil:
 			if write.Create.ID() == "" {
-				write.Create.SetID(uuid.Must(uuid.NewV7()).String())
+				write.Create.SetID(uuid.NewV7().String())
 			}
 		case write.Update != nil:
 			if mask := write.Update.Mask(); len(mask.GetPaths()) == 0 {
