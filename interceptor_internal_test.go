@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"buf.build/go/protovalidate"
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
@@ -22,7 +22,7 @@ func (v failingValidator) Validate(proto.Message, ...protovalidate.ValidationOpt
 var _ = Describe("FieldBehaviorInterceptor validation", func() {
 	It("reports a rule that fails to compile as Internal, without its diagnostic", func() {
 		cause := &protovalidate.CompilationError{}
-		interceptor := &FieldBehaviorInterceptor{validator: failingValidator{err: cause}}
+		interceptor := &fieldBehavior{validator: failingValidator{err: cause}}
 
 		err := interceptor.validate(&testpb.UpdateBookRequest{Book: &testpb.Book{Name: "books/dune"}})
 

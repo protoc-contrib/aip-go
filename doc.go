@@ -30,8 +30,8 @@
 // [ResourceWrites] recognises the AIP standard method request shapes — a create
 // (AIP-133), an update (AIP-134), a batch of either (AIP-233, AIP-234) — and
 // yields the resources a request writes, with their create id or update
-// mask. [FieldBehaviorInterceptor] is a connect.Interceptor applying
-// it all on the server with fixed behavior: on a unary RPC, clear OUTPUT_ONLY,
+// mask. [NewFieldBehaviorInterceptor] returns a connect.ServerInterceptor
+// (connect-go v2) applying it all on the server with fixed behavior: on a unary RPC, clear OUTPUT_ONLY,
 // fill in a create's omitted id and an update's omitted mask, validate with
 // protovalidate and REQUIRED as one InvalidArgument error (with
 // buf.validate.Violations and google.rpc.BadRequest details), and clear

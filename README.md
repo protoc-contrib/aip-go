@@ -29,7 +29,7 @@ concept, not by a package path.
 | [203](https://google.aip.dev/203#required) | `REQUIRED` on a request's own fields | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 | [133](https://google.aip.dev/133), [134](https://google.aip.dev/134), [233](https://google.aip.dev/233), [234](https://google.aip.dev/234) | standard-method request shapes | ✅ `ResourceWrites` |
-| — | Connect interceptor applying all of the above | ✅ `FieldBehaviorInterceptor` |
+| — | Connect interceptor applying all of the above | ✅ `NewFieldBehaviorInterceptor` |
 
 ## Ordering, pagination and filtering
 
@@ -142,8 +142,9 @@ an unset mask names nothing rather than turning it into a create; a batch
 `ResourceCreate` (the `<resource>_id`) or a `ResourceUpdate` (the
 `update_mask`).
 
-`FieldBehaviorInterceptor` is a `connect.Interceptor` applying all of it on the
-server, with fixed behavior:
+`NewFieldBehaviorInterceptor` returns a `connect.ServerInterceptor`
+([connect-go v2](https://github.com/connectrpc/connect-go)) applying all of it on
+the server, with fixed behavior:
 
 | RPC | Request | Response |
 | --- | --- | --- |
@@ -158,15 +159,19 @@ name from the request's `parent` and the id; the interceptor only fills in an
 omitted id. The handler reads both from the request — e.g. the generated
 `ParseItemID()` and `ParseParent()` — and the `name` a response returns comes
 from storage, so the resource's `name` and `parent` on the request are left as
-they arrive. A client passes through untouched. Clearing changes messages in place,
-including the response a handler returns and every message it sends.
+they arrive. It is a server interceptor, so it never acts on a client. Clearing
+changes messages in place, including the response a handler returns and every
+message it sends. The request is filled in and validated as the handler receives
+it, so one that fails validation never reaches the handler.
 
 ```go
 fields, err := aip.NewFieldBehaviorInterceptor()
 if err != nil {
 	return err
 }
-path, handler := acmev1connect.NewBookServiceHandler(svc, connect.WithInterceptors(fields))
+server := connect.NewServer(fields)
+acmev1connect.RegisterBookServiceHandler(server, svc)
+connecthttp.Mount(mux, server)
 ```
 
 A `REQUIRED` field left unset reads exactly as protovalidate's own `required`
