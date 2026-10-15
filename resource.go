@@ -57,6 +57,10 @@ type patternSegment struct {
 // A segment written as "{name}" captures a value; every other segment is a
 // literal that must match exactly. Variable names must be unique so that error
 // messages can identify a segment unambiguously.
+//
+// The spelling is checked too, as AIP-122 and AIP-123 ask: a literal must be a
+// camelCase collection identifier ("books", "billingAccounts") and a variable
+// name must be snake_case ("book", "billing_account").
 func CompileResourcePattern(pattern string) (*ResourcePattern, error) {
 	if pattern == "" {
 		return nil, errors.New("compile resource pattern: empty pattern")
@@ -72,6 +76,9 @@ func CompileResourcePattern(pattern string) (*ResourcePattern, error) {
 			if strings.ContainsAny(part, "{}") {
 				return nil, fmt.Errorf("compile resource pattern %q: malformed segment %q", pattern, part)
 			}
+			if !isCollectionID(part) {
+				return nil, fmt.Errorf("compile resource pattern %q: literal %q is not a camelCase collection identifier", pattern, part)
+			}
 			compiled.segments = append(compiled.segments, patternSegment{name: part})
 			continue
 		}
@@ -85,6 +92,9 @@ func CompileResourcePattern(pattern string) (*ResourcePattern, error) {
 		if strings.ContainsAny(name, "{}") {
 			return nil, fmt.Errorf("compile resource pattern %q: malformed segment %q", pattern, part)
 		}
+		if !isVariableName(name) {
+			return nil, fmt.Errorf("compile resource pattern %q: variable name %q is not snake_case", pattern, name)
+		}
 		if _, duplicate := seen[name]; duplicate {
 			return nil, fmt.Errorf("compile resource pattern %q: duplicate variable %q", pattern, name)
 		}
@@ -93,6 +103,36 @@ func CompileResourcePattern(pattern string) (*ResourcePattern, error) {
 		compiled.variables++
 	}
 	return compiled, nil
+}
+
+// isCollectionID reports whether literal is a camelCase collection identifier,
+// as AIP-122 asks: a lowercase ASCII letter followed by ASCII letters and
+// digits.
+func isCollectionID(literal string) bool {
+	for i, c := range literal {
+		switch {
+		case 'a' <= c && c <= 'z':
+		case i > 0 && ('A' <= c && c <= 'Z' || '0' <= c && c <= '9'):
+		default:
+			return false
+		}
+	}
+	return literal != ""
+}
+
+// isVariableName reports whether name is a snake_case pattern variable, as
+// AIP-123 asks: a lowercase ASCII letter followed by lowercase letters, digits
+// and underscores.
+func isVariableName(name string) bool {
+	for i, c := range name {
+		switch {
+		case 'a' <= c && c <= 'z':
+		case i > 0 && ('0' <= c && c <= '9' || c == '_'):
+		default:
+			return false
+		}
+	}
+	return name != ""
 }
 
 // MustCompileResourcePattern is [CompileResourcePattern] but panics on a bad
