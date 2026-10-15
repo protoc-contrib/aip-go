@@ -8,217 +8,377 @@
 package testpbconnect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	testpb "github.com/protoc-contrib/aip-go/internal/testpb"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BookServiceName is the fully-qualified name of the BookService service.
 	BookServiceName = "tests.BookService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BookServiceCreateBookProcedure is the fully-qualified name of the BookService's CreateBook RPC.
+	// BookServiceCreateBookProcedure is the procedure name of the BookService's CreateBook RPC.
 	BookServiceCreateBookProcedure = "/tests.BookService/CreateBook"
-	// BookServiceUpdateBookProcedure is the fully-qualified name of the BookService's UpdateBook RPC.
+	// BookServiceUpdateBookProcedure is the procedure name of the BookService's UpdateBook RPC.
 	BookServiceUpdateBookProcedure = "/tests.BookService/UpdateBook"
-	// BookServiceBatchCreateBooksProcedure is the fully-qualified name of the BookService's
-	// BatchCreateBooks RPC.
+	// BookServiceBatchCreateBooksProcedure is the procedure name of the BookService's BatchCreateBooks
+	// RPC.
 	BookServiceBatchCreateBooksProcedure = "/tests.BookService/BatchCreateBooks"
-	// BookServiceGetBookProcedure is the fully-qualified name of the BookService's GetBook RPC.
+	// BookServiceGetBookProcedure is the procedure name of the BookService's GetBook RPC.
 	BookServiceGetBookProcedure = "/tests.BookService/GetBook"
-	// BookServiceSyncBooksProcedure is the fully-qualified name of the BookService's SyncBooks RPC.
+	// BookServiceSyncBooksProcedure is the procedure name of the BookService's SyncBooks RPC.
 	BookServiceSyncBooksProcedure = "/tests.BookService/SyncBooks"
+	// BookServiceImportBooksProcedure is the procedure name of the BookService's ImportBooks RPC.
+	BookServiceImportBooksProcedure = "/tests.BookService/ImportBooks"
+)
+
+var (
+	bookServiceCreateBookSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods().ByName("CreateBook"),
+			Procedure:  BookServiceCreateBookProcedure,
+		}
+	})
+	bookServiceUpdateBookSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods().ByName("UpdateBook"),
+			Procedure:  BookServiceUpdateBookProcedure,
+		}
+	})
+	bookServiceBatchCreateBooksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods().ByName("BatchCreateBooks"),
+			Procedure:  BookServiceBatchCreateBooksProcedure,
+		}
+	})
+	bookServiceGetBookSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods().ByName("GetBook"),
+			Procedure:  BookServiceGetBookProcedure,
+		}
+	})
+	bookServiceSyncBooksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeBidi,
+			Schema:     testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods().ByName("SyncBooks"),
+			Procedure:  BookServiceSyncBooksProcedure,
+		}
+	})
+	bookServiceImportBooksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeBidi,
+			Schema:     testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods().ByName("ImportBooks"),
+			Procedure:  BookServiceImportBooksProcedure,
+		}
+	})
 )
 
 // BookServiceClient is a client for the tests.BookService service.
 type BookServiceClient interface {
-	CreateBook(context.Context, *connect.Request[testpb.CreateBookRequest]) (*connect.Response[testpb.Book], error)
-	UpdateBook(context.Context, *connect.Request[testpb.UpdateBookRequest]) (*connect.Response[testpb.Book], error)
-	BatchCreateBooks(context.Context, *connect.Request[testpb.BatchCreateBooksRequest]) (*connect.Response[testpb.BatchCreateBooksResponse], error)
-	GetBook(context.Context, *connect.Request[testpb.GetBookRequest]) (*connect.Response[testpb.Book], error)
-	SyncBooks(context.Context) *connect.BidiStreamForClient[testpb.Book, testpb.Book]
+	CreateBook(context.Context, *testpb.CreateBookRequest) (*testpb.Book, error)
+	UpdateBook(context.Context, *testpb.UpdateBookRequest) (*testpb.Book, error)
+	BatchCreateBooks(context.Context, *testpb.BatchCreateBooksRequest) (*testpb.BatchCreateBooksResponse, error)
+	GetBook(context.Context, *testpb.GetBookRequest) (*testpb.Book, error)
+	SyncBooks(context.Context) (BookServiceSyncBooksClientStream, error)
+	ImportBooks(context.Context) (BookServiceImportBooksClientStream, error)
 }
 
-// NewBookServiceClient constructs a client for the tests.BookService service. By default, it uses
-// the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBookServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BookServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	bookServiceMethods := testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods()
-	return &bookServiceClient{
-		createBook: connect.NewClient[testpb.CreateBookRequest, testpb.Book](
-			httpClient,
-			baseURL+BookServiceCreateBookProcedure,
-			connect.WithSchema(bookServiceMethods.ByName("CreateBook")),
-			connect.WithClientOptions(opts...),
-		),
-		updateBook: connect.NewClient[testpb.UpdateBookRequest, testpb.Book](
-			httpClient,
-			baseURL+BookServiceUpdateBookProcedure,
-			connect.WithSchema(bookServiceMethods.ByName("UpdateBook")),
-			connect.WithClientOptions(opts...),
-		),
-		batchCreateBooks: connect.NewClient[testpb.BatchCreateBooksRequest, testpb.BatchCreateBooksResponse](
-			httpClient,
-			baseURL+BookServiceBatchCreateBooksProcedure,
-			connect.WithSchema(bookServiceMethods.ByName("BatchCreateBooks")),
-			connect.WithClientOptions(opts...),
-		),
-		getBook: connect.NewClient[testpb.GetBookRequest, testpb.Book](
-			httpClient,
-			baseURL+BookServiceGetBookProcedure,
-			connect.WithSchema(bookServiceMethods.ByName("GetBook")),
-			connect.WithClientOptions(opts...),
-		),
-		syncBooks: connect.NewClient[testpb.Book, testpb.Book](
-			httpClient,
-			baseURL+BookServiceSyncBooksProcedure,
-			connect.WithSchema(bookServiceMethods.ByName("SyncBooks")),
-			connect.WithClientOptions(opts...),
-		),
+// NewBookServiceClient constructs a client for the tests.BookService service. Multiple service
+// clients may share a single connect.Client.
+func NewBookServiceClient(client *connect.Client) BookServiceClient {
+	return &bookServiceClient{client: client}
+}
+
+// BookServiceSyncBooksClientStream is the client stream for the BookService's SyncBooks RPC.
+type BookServiceSyncBooksClientStream struct {
+	stream connect.ClientStream
+}
+
+// SendHeaders opens the stream and flushes the request headers without a message. The first Send or
+// Receive does this implicitly.
+func (s BookServiceSyncBooksClientStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a request message to the server.
+func (s BookServiceSyncBooksClientStream) Send(req *testpb.Book) error {
+	return s.stream.Send(req)
+}
+
+// CloseSend closes the request side of the stream.
+func (s BookServiceSyncBooksClientStream) CloseSend() error {
+	return s.stream.CloseSend()
+}
+
+// Receive returns the next response message from the server.
+func (s BookServiceSyncBooksClientStream) Receive() (*testpb.Book, error) {
+	var res testpb.Book
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// bookServiceClient implements BookServiceClient.
-type bookServiceClient struct {
-	createBook       *connect.Client[testpb.CreateBookRequest, testpb.Book]
-	updateBook       *connect.Client[testpb.UpdateBookRequest, testpb.Book]
-	batchCreateBooks *connect.Client[testpb.BatchCreateBooksRequest, testpb.BatchCreateBooksResponse]
-	getBook          *connect.Client[testpb.GetBookRequest, testpb.Book]
-	syncBooks        *connect.Client[testpb.Book, testpb.Book]
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BookServiceSyncBooksClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// CreateBook calls tests.BookService.CreateBook.
-func (c *bookServiceClient) CreateBook(ctx context.Context, req *connect.Request[testpb.CreateBookRequest]) (*connect.Response[testpb.Book], error) {
-	return c.createBook.CallUnary(ctx, req)
+// BookServiceImportBooksClientStream is the client stream for the BookService's ImportBooks RPC.
+type BookServiceImportBooksClientStream struct {
+	stream connect.ClientStream
 }
 
-// UpdateBook calls tests.BookService.UpdateBook.
-func (c *bookServiceClient) UpdateBook(ctx context.Context, req *connect.Request[testpb.UpdateBookRequest]) (*connect.Response[testpb.Book], error) {
-	return c.updateBook.CallUnary(ctx, req)
+// SendHeaders opens the stream and flushes the request headers without a message. The first Send or
+// Receive does this implicitly.
+func (s BookServiceImportBooksClientStream) SendHeaders() error {
+	return s.stream.SendHeaders()
 }
 
-// BatchCreateBooks calls tests.BookService.BatchCreateBooks.
-func (c *bookServiceClient) BatchCreateBooks(ctx context.Context, req *connect.Request[testpb.BatchCreateBooksRequest]) (*connect.Response[testpb.BatchCreateBooksResponse], error) {
-	return c.batchCreateBooks.CallUnary(ctx, req)
+// Send sends a request message to the server.
+func (s BookServiceImportBooksClientStream) Send(req *testpb.CreateBookRequest) error {
+	return s.stream.Send(req)
 }
 
-// GetBook calls tests.BookService.GetBook.
-func (c *bookServiceClient) GetBook(ctx context.Context, req *connect.Request[testpb.GetBookRequest]) (*connect.Response[testpb.Book], error) {
-	return c.getBook.CallUnary(ctx, req)
+// CloseSend closes the request side of the stream.
+func (s BookServiceImportBooksClientStream) CloseSend() error {
+	return s.stream.CloseSend()
 }
 
-// SyncBooks calls tests.BookService.SyncBooks.
-func (c *bookServiceClient) SyncBooks(ctx context.Context) *connect.BidiStreamForClient[testpb.Book, testpb.Book] {
-	return c.syncBooks.CallBidiStream(ctx)
+// Receive returns the next response message from the server.
+func (s BookServiceImportBooksClientStream) Receive() (*testpb.Book, error) {
+	var res testpb.Book
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BookServiceImportBooksClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // BookServiceHandler is an implementation of the tests.BookService service.
 type BookServiceHandler interface {
-	CreateBook(context.Context, *connect.Request[testpb.CreateBookRequest]) (*connect.Response[testpb.Book], error)
-	UpdateBook(context.Context, *connect.Request[testpb.UpdateBookRequest]) (*connect.Response[testpb.Book], error)
-	BatchCreateBooks(context.Context, *connect.Request[testpb.BatchCreateBooksRequest]) (*connect.Response[testpb.BatchCreateBooksResponse], error)
-	GetBook(context.Context, *connect.Request[testpb.GetBookRequest]) (*connect.Response[testpb.Book], error)
-	SyncBooks(context.Context, *connect.BidiStream[testpb.Book, testpb.Book]) error
+	CreateBook(context.Context, *testpb.CreateBookRequest) (*testpb.Book, error)
+	UpdateBook(context.Context, *testpb.UpdateBookRequest) (*testpb.Book, error)
+	BatchCreateBooks(context.Context, *testpb.BatchCreateBooksRequest) (*testpb.BatchCreateBooksResponse, error)
+	GetBook(context.Context, *testpb.GetBookRequest) (*testpb.Book, error)
+	SyncBooks(context.Context, BookServiceSyncBooksServerStream) error
+	ImportBooks(context.Context, BookServiceImportBooksServerStream) error
 }
 
-// NewBookServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBookServiceHandler(svc BookServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	bookServiceMethods := testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods()
-	bookServiceCreateBookHandler := connect.NewUnaryHandler(
-		BookServiceCreateBookProcedure,
-		svc.CreateBook,
-		connect.WithSchema(bookServiceMethods.ByName("CreateBook")),
-		connect.WithHandlerOptions(opts...),
+// RegisterBookServiceHandler registers svc as the tests.BookService implementation on server.
+func RegisterBookServiceHandler(server *connect.Server, svc BookServiceHandler) {
+	adapter := bookServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: bookServiceCreateBookSpec(), Handler: adapter.createBook},
+		connect.Method{Spec: bookServiceUpdateBookSpec(), Handler: adapter.updateBook},
+		connect.Method{Spec: bookServiceBatchCreateBooksSpec(), Handler: adapter.batchCreateBooks},
+		connect.Method{Spec: bookServiceGetBookSpec(), Handler: adapter.getBook},
+		connect.Method{Spec: bookServiceSyncBooksSpec(), Handler: adapter.syncBooks},
+		connect.Method{Spec: bookServiceImportBooksSpec(), Handler: adapter.importBooks},
 	)
-	bookServiceUpdateBookHandler := connect.NewUnaryHandler(
-		BookServiceUpdateBookProcedure,
-		svc.UpdateBook,
-		connect.WithSchema(bookServiceMethods.ByName("UpdateBook")),
-		connect.WithHandlerOptions(opts...),
-	)
-	bookServiceBatchCreateBooksHandler := connect.NewUnaryHandler(
-		BookServiceBatchCreateBooksProcedure,
-		svc.BatchCreateBooks,
-		connect.WithSchema(bookServiceMethods.ByName("BatchCreateBooks")),
-		connect.WithHandlerOptions(opts...),
-	)
-	bookServiceGetBookHandler := connect.NewUnaryHandler(
-		BookServiceGetBookProcedure,
-		svc.GetBook,
-		connect.WithSchema(bookServiceMethods.ByName("GetBook")),
-		connect.WithHandlerOptions(opts...),
-	)
-	bookServiceSyncBooksHandler := connect.NewBidiStreamHandler(
-		BookServiceSyncBooksProcedure,
-		svc.SyncBooks,
-		connect.WithSchema(bookServiceMethods.ByName("SyncBooks")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/tests.BookService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BookServiceCreateBookProcedure:
-			bookServiceCreateBookHandler.ServeHTTP(w, r)
-		case BookServiceUpdateBookProcedure:
-			bookServiceUpdateBookHandler.ServeHTTP(w, r)
-		case BookServiceBatchCreateBooksProcedure:
-			bookServiceBatchCreateBooksHandler.ServeHTTP(w, r)
-		case BookServiceGetBookProcedure:
-			bookServiceGetBookHandler.ServeHTTP(w, r)
-		case BookServiceSyncBooksProcedure:
-			bookServiceSyncBooksHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// BookServiceSyncBooksServerStream is the server stream for the BookService's SyncBooks RPC.
+type BookServiceSyncBooksServerStream struct {
+	stream connect.ServerStream
+}
+
+// Receive returns the next request message from the client.
+func (s BookServiceSyncBooksServerStream) Receive() (*testpb.Book, error) {
+	var req testpb.Book
+	if err := s.stream.Receive(&req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BookServiceSyncBooksServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BookServiceSyncBooksServerStream) Send(res *testpb.Book) error {
+	return s.stream.Send(res)
+}
+
+// BookServiceImportBooksServerStream is the server stream for the BookService's ImportBooks RPC.
+type BookServiceImportBooksServerStream struct {
+	stream connect.ServerStream
+}
+
+// Receive returns the next request message from the client.
+func (s BookServiceImportBooksServerStream) Receive() (*testpb.CreateBookRequest, error) {
+	var req testpb.CreateBookRequest
+	if err := s.stream.Receive(&req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BookServiceImportBooksServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BookServiceImportBooksServerStream) Send(res *testpb.Book) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedBookServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBookServiceHandler struct{}
 
-func (UnimplementedBookServiceHandler) CreateBook(context.Context, *connect.Request[testpb.CreateBookRequest]) (*connect.Response[testpb.Book], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tests.BookService.CreateBook is not implemented"))
+func (UnimplementedBookServiceHandler) CreateBook(context.Context, *testpb.CreateBookRequest) (*testpb.Book, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "tests.BookService.CreateBook is not implemented")
 }
 
-func (UnimplementedBookServiceHandler) UpdateBook(context.Context, *connect.Request[testpb.UpdateBookRequest]) (*connect.Response[testpb.Book], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tests.BookService.UpdateBook is not implemented"))
+func (UnimplementedBookServiceHandler) UpdateBook(context.Context, *testpb.UpdateBookRequest) (*testpb.Book, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "tests.BookService.UpdateBook is not implemented")
 }
 
-func (UnimplementedBookServiceHandler) BatchCreateBooks(context.Context, *connect.Request[testpb.BatchCreateBooksRequest]) (*connect.Response[testpb.BatchCreateBooksResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tests.BookService.BatchCreateBooks is not implemented"))
+func (UnimplementedBookServiceHandler) BatchCreateBooks(context.Context, *testpb.BatchCreateBooksRequest) (*testpb.BatchCreateBooksResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "tests.BookService.BatchCreateBooks is not implemented")
 }
 
-func (UnimplementedBookServiceHandler) GetBook(context.Context, *connect.Request[testpb.GetBookRequest]) (*connect.Response[testpb.Book], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("tests.BookService.GetBook is not implemented"))
+func (UnimplementedBookServiceHandler) GetBook(context.Context, *testpb.GetBookRequest) (*testpb.Book, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "tests.BookService.GetBook is not implemented")
 }
 
-func (UnimplementedBookServiceHandler) SyncBooks(context.Context, *connect.BidiStream[testpb.Book, testpb.Book]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("tests.BookService.SyncBooks is not implemented"))
+func (UnimplementedBookServiceHandler) SyncBooks(context.Context, BookServiceSyncBooksServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "tests.BookService.SyncBooks is not implemented")
+}
+
+func (UnimplementedBookServiceHandler) ImportBooks(context.Context, BookServiceImportBooksServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "tests.BookService.ImportBooks is not implemented")
+}
+
+type bookServiceClient struct {
+	client *connect.Client
+}
+
+func (c *bookServiceClient) CreateBook(ctx context.Context, req *testpb.CreateBookRequest) (*testpb.Book, error) {
+	var res testpb.Book
+	if err := c.client.CallUnary(ctx, bookServiceCreateBookSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bookServiceClient) UpdateBook(ctx context.Context, req *testpb.UpdateBookRequest) (*testpb.Book, error) {
+	var res testpb.Book
+	if err := c.client.CallUnary(ctx, bookServiceUpdateBookSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bookServiceClient) BatchCreateBooks(ctx context.Context, req *testpb.BatchCreateBooksRequest) (*testpb.BatchCreateBooksResponse, error) {
+	var res testpb.BatchCreateBooksResponse
+	if err := c.client.CallUnary(ctx, bookServiceBatchCreateBooksSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bookServiceClient) GetBook(ctx context.Context, req *testpb.GetBookRequest) (*testpb.Book, error) {
+	var res testpb.Book
+	if err := c.client.CallUnary(ctx, bookServiceGetBookSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *bookServiceClient) SyncBooks(ctx context.Context) (BookServiceSyncBooksClientStream, error) {
+	stream, err := c.client.CallClientStream(ctx, bookServiceSyncBooksSpec())
+	if err != nil {
+		return BookServiceSyncBooksClientStream{}, err
+	}
+	return BookServiceSyncBooksClientStream{stream: stream}, nil
+}
+
+func (c *bookServiceClient) ImportBooks(ctx context.Context) (BookServiceImportBooksClientStream, error) {
+	stream, err := c.client.CallClientStream(ctx, bookServiceImportBooksSpec())
+	if err != nil {
+		return BookServiceImportBooksClientStream{}, err
+	}
+	return BookServiceImportBooksClientStream{stream: stream}, nil
+}
+
+type bookServiceHandler struct{ svc BookServiceHandler }
+
+func (h bookServiceHandler) createBook(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req testpb.CreateBookRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateBook(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bookServiceHandler) updateBook(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req testpb.UpdateBookRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateBook(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bookServiceHandler) batchCreateBooks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req testpb.BatchCreateBooksRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BatchCreateBooks(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bookServiceHandler) getBook(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req testpb.GetBookRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetBook(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h bookServiceHandler) syncBooks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	return h.svc.SyncBooks(ctx, BookServiceSyncBooksServerStream{stream: stream})
+}
+
+func (h bookServiceHandler) importBooks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	return h.svc.ImportBooks(ctx, BookServiceImportBooksServerStream{stream: stream})
 }

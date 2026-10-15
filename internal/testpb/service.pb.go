@@ -645,7 +645,7 @@ const file_internal_testpb_service_proto_rawDesc = "" +
 	"chapter_id\x18\x02 \x01(\tB\x03\xe0A\x01R\tchapterId\x12-\n" +
 	"\achapter\x18\x03 \x01(\v2\x0e.tests.ChapterB\x03\xe0A\x02R\achapter\"9\n" +
 	"\x11ImportBookRequest\x12$\n" +
-	"\x04book\x18\x01 \x01(\v2\v.tests.BookB\x03\xe0A\x02R\x04book2\xa6\x02\n" +
+	"\x04book\x18\x01 \x01(\v2\v.tests.BookB\x03\xe0A\x02R\x04book2\xe0\x02\n" +
 	"\vBookService\x123\n" +
 	"\n" +
 	"CreateBook\x12\x18.tests.CreateBookRequest\x1a\v.tests.Book\x123\n" +
@@ -653,7 +653,8 @@ const file_internal_testpb_service_proto_rawDesc = "" +
 	"UpdateBook\x12\x18.tests.UpdateBookRequest\x1a\v.tests.Book\x12S\n" +
 	"\x10BatchCreateBooks\x12\x1e.tests.BatchCreateBooksRequest\x1a\x1f.tests.BatchCreateBooksResponse\x12-\n" +
 	"\aGetBook\x12\x15.tests.GetBookRequest\x1a\v.tests.Book\x12)\n" +
-	"\tSyncBooks\x12\v.tests.Book\x1a\v.tests.Book(\x010\x01B2Z0github.com/protoc-contrib/aip-go/internal/testpbb\x06proto3"
+	"\tSyncBooks\x12\v.tests.Book\x1a\v.tests.Book(\x010\x01\x128\n" +
+	"\vImportBooks\x12\x18.tests.CreateBookRequest\x1a\v.tests.Book(\x010\x01B2Z0github.com/protoc-contrib/aip-go/internal/testpbb\x06proto3"
 
 var (
 	file_internal_testpb_service_proto_rawDescOnce sync.Once
@@ -697,13 +698,15 @@ var file_internal_testpb_service_proto_depIdxs = []int32{
 	3,  // 11: tests.BookService.BatchCreateBooks:input_type -> tests.BatchCreateBooksRequest
 	6,  // 12: tests.BookService.GetBook:input_type -> tests.GetBookRequest
 	0,  // 13: tests.BookService.SyncBooks:input_type -> tests.Book
-	0,  // 14: tests.BookService.CreateBook:output_type -> tests.Book
-	0,  // 15: tests.BookService.UpdateBook:output_type -> tests.Book
-	4,  // 16: tests.BookService.BatchCreateBooks:output_type -> tests.BatchCreateBooksResponse
-	0,  // 17: tests.BookService.GetBook:output_type -> tests.Book
-	0,  // 18: tests.BookService.SyncBooks:output_type -> tests.Book
-	14, // [14:19] is the sub-list for method output_type
-	9,  // [9:14] is the sub-list for method input_type
+	1,  // 14: tests.BookService.ImportBooks:input_type -> tests.CreateBookRequest
+	0,  // 15: tests.BookService.CreateBook:output_type -> tests.Book
+	0,  // 16: tests.BookService.UpdateBook:output_type -> tests.Book
+	4,  // 17: tests.BookService.BatchCreateBooks:output_type -> tests.BatchCreateBooksResponse
+	0,  // 18: tests.BookService.GetBook:output_type -> tests.Book
+	0,  // 19: tests.BookService.SyncBooks:output_type -> tests.Book
+	0,  // 20: tests.BookService.ImportBooks:output_type -> tests.Book
+	15, // [15:21] is the sub-list for method output_type
+	9,  // [9:15] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name

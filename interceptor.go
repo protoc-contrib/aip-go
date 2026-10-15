@@ -7,7 +7,8 @@ import (
 
 	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"buf.build/go/protovalidate"
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protopath"
@@ -16,114 +17,67 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
-// FieldBehaviorInterceptor is a [connect.Interceptor] that applies AIP field
-// behavior on the server. Its behavior is fixed:
+// NewFieldBehaviorInterceptor returns a [connect.ServerInterceptor] that
+// applies AIP field behavior on the server, to every message of every RPC,
+// unary or streamed. Its behavior is fixed:
 //
-//   - On a unary RPC it clears OUTPUT_ONLY fields from the request; fills in
-//     what AIP leaves to the server on each resource the request writes
+//   - Each message the server receives has its OUTPUT_ONLY fields cleared;
+//     what AIP leaves to the server is filled in on each resource it writes
 //     ([ResourceWrites]) — a create's omitted `<resource>_id` becomes a UUIDv7
 //     (AIP-133), an update's omitted mask becomes [ImpliedFieldMask]
 //     (AIP-134), and the OUTPUT_ONLY paths of an update's explicit mask are
-//     removed with [ClearFieldMask] (AIP-203); then validates the request with
-//     protovalidate and reports every REQUIRED field each resource leaves unset
-//     — all of them on a create, those the mask names on an update — in one
-//     [connect.CodeInvalidArgument] error carrying the violations as a
-//     buf.validate.Violations detail and as AIP-193's google.rpc.BadRequest;
-//     and clears INPUT_ONLY fields from the response.
-//   - On a streaming RPC it clears OUTPUT_ONLY fields from every message the
-//     server receives and INPUT_ONLY fields from every message it sends.
-//     Streams have no standard-method shape, so nothing is filled in or
-//     validated.
+//     removed with [ClearFieldMask] (AIP-203); then it is validated with
+//     protovalidate, and every REQUIRED field each resource leaves unset —
+//     all of them on a create, those the mask names on an update — is
+//     reported in one [connect.CodeInvalidArgument] error carrying the
+//     violations as a buf.validate.Violations detail and as AIP-193's
+//     google.rpc.BadRequest. The error is returned from the handler's
+//     Receive, so a message that fails validation never reaches it.
+//   - Each message the server sends has its INPUT_ONLY fields cleared.
 //
-// It acts on the server only; a client passes through untouched. Clearing
-// changes the messages in place, including the response the handler returns
-// and every message it sends. For a different policy, build an interceptor
-// from [ClearFields], [ValidateFields], [ImpliedFieldMask], [ClearFieldMask]
-// and [ResourceWrites].
-type FieldBehaviorInterceptor struct {
-	validator protovalidate.Validator
-}
-
-var _ connect.Interceptor = (*FieldBehaviorInterceptor)(nil)
-
-// NewFieldBehaviorInterceptor returns a [FieldBehaviorInterceptor]. It fails
-// only if protovalidate's validator cannot be built.
-func NewFieldBehaviorInterceptor() (*FieldBehaviorInterceptor, error) {
+// A message that is not a standard-method request, such as a resource
+// streamed on its own, has nothing filled in or checked for REQUIRED; only
+// clearing and its protovalidate rules apply. Clearing changes the messages in
+// place, including the response the handler returns and every message it
+// sends. For a different policy, build an
+// interceptor from [ClearFields], [ValidateFields], [ImpliedFieldMask],
+// [ClearFieldMask] and [ResourceWrites].
+//
+// It fails only if protovalidate's validator cannot be built.
+func NewFieldBehaviorInterceptor() (connect.ServerInterceptor, error) {
 	validator, err := protovalidate.New()
 	if err != nil {
 		return nil, err
 	}
-	return &FieldBehaviorInterceptor{validator: validator}, nil
-}
-
-// WrapUnary implements [connect.Interceptor].
-func (i *FieldBehaviorInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		request, ok := req.Any().(proto.Message)
-		if req.Spec().IsClient || !ok {
-			return next(ctx, req)
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(ctx, spec, &fieldBehaviorStream{ServerStream: stream, validator: validator})
 		}
-		ClearFields(request, OutputOnly)
-		implyRequest(request)
-		if err := i.validate(request); err != nil {
-			return nil, err
-		}
-		resp, err := next(ctx, req)
-		if resp != nil {
-			if response, ok := resp.Any().(proto.Message); ok {
-				ClearFields(response, InputOnly)
-			}
-		}
-		return resp, err
-	}
+	}, nil
 }
 
-// WrapStreamingClient implements [connect.Interceptor]: a client passes
-// through untouched.
-func (i *FieldBehaviorInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
+// fieldBehaviorStream applies field behavior to the messages of one RPC, as
+// [NewFieldBehaviorInterceptor] describes.
+type fieldBehaviorStream struct {
+	connect.ServerStream
+	validator protovalidate.Validator
 }
 
-// WrapStreamingHandler implements [connect.Interceptor].
-func (i *FieldBehaviorInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(ctx, &fieldBehaviorConn{StreamingHandlerConn: conn})
-	}
-}
-
-// fieldBehaviorConn clears what a client may not write from every message the
-// server receives, and what it may not read from every message the server
-// sends.
-type fieldBehaviorConn struct {
-	connect.StreamingHandlerConn
-}
-
-func (c *fieldBehaviorConn) Receive(message any) error {
-	if err := c.StreamingHandlerConn.Receive(message); err != nil {
+func (s *fieldBehaviorStream) Receive(message any) error {
+	if err := s.ServerStream.Receive(message); err != nil {
 		return err
 	}
-	if m, ok := message.(proto.Message); ok {
-		ClearFields(m, OutputOnly)
+	request, ok := message.(proto.Message)
+	if !ok {
+		return nil
 	}
-	return nil
-}
-
-func (c *fieldBehaviorConn) Send(message any) error {
-	if m, ok := message.(proto.Message); ok {
-		ClearFields(m, InputOnly)
-	}
-	return c.StreamingHandlerConn.Send(message)
-}
-
-// implyRequest fills in what AIP leaves to the server on each resource request
-// writes: a create's omitted id, an update's omitted mask. An update's explicit
-// mask loses its OUTPUT_ONLY paths, which AIP-203 has a server ignore rather
-// than reject; a mask left empty by that writes nothing, and is not implied
-// instead. A create's name is
-// the server's to build from the request's `parent` and that id (AIP-133):
-// the handler reads both from the request, and the name a response returns
-// comes from storage.
-func implyRequest(request proto.Message) {
+	ClearFields(request, OutputOnly)
+	// Fill in what AIP leaves to the server on each resource the request
+	// writes: a create's omitted id (AIP-133), an update's omitted mask
+	// (AIP-134). An explicit mask loses its OUTPUT_ONLY paths, which AIP-203
+	// has a server ignore rather than reject; a mask left empty by that
+	// writes nothing, and is not implied instead. A create's name is the
+	// handler's to build from the request's parent and that id.
 	for write := range ResourceWrites(request) {
 		switch {
 		case write.Create != nil:
@@ -139,6 +93,14 @@ func implyRequest(request proto.Message) {
 			}
 		}
 	}
+	return s.validate(request)
+}
+
+func (s *fieldBehaviorStream) Send(message any) error {
+	if response, ok := message.(proto.Message); ok {
+		ClearFields(response, InputOnly)
+	}
+	return s.ServerStream.Send(message)
 }
 
 // validate returns nil when request passes protovalidate and leaves no
@@ -147,14 +109,14 @@ func implyRequest(request proto.Message) {
 // [*protovalidate.ValidationError] with a buf.validate.Violations detail and a
 // google.rpc.BadRequest one (see badRequest). A
 // rule that fails to compile or evaluate is the server's fault: Internal,
-// with the fixed message "validation failed" and the diagnostic only under it
-// (see opaque).
-func (i *FieldBehaviorInterceptor) validate(request proto.Message) error {
+// with the fixed message "validation failed" and the diagnostic as its cause,
+// which never reaches the client.
+func (s *fieldBehaviorStream) validate(request proto.Message) error {
 	var violations []*protovalidate.Violation
-	if err := i.validator.Validate(request); err != nil {
+	if err := s.validator.Validate(request); err != nil {
 		var verr *protovalidate.ValidationError
 		if !errors.As(err, &verr) {
-			return connect.NewError(connect.CodeInternal, &opaque{message: "validation failed", cause: err})
+			return connect.NewError(connect.CodeInternal, "validation failed").WithCause(err)
 		}
 		violations = verr.Violations
 	}
@@ -174,12 +136,12 @@ func (i *FieldBehaviorInterceptor) validate(request proto.Message) error {
 		return nil
 	}
 	verr := &protovalidate.ValidationError{Violations: violations}
-	cerr := connect.NewError(connect.CodeInvalidArgument, verr)
-	if detail, err := connect.NewErrorDetail(verr.ToProto()); err == nil {
-		cerr.AddDetail(detail)
+	cerr := connect.NewError(connect.CodeInvalidArgument, verr.Error()).WithCause(verr)
+	if detail, err := connectproto.NewErrorDetail(verr.ToProto()); err == nil {
+		cerr = cerr.WithDetail(detail)
 	}
-	if detail, err := connect.NewErrorDetail(badRequest(violations)); err == nil {
-		cerr.AddDetail(detail)
+	if detail, err := connectproto.NewErrorDetail(badRequest(violations)); err == nil {
+		cerr = cerr.WithDetail(detail)
 	}
 	return cerr
 }
@@ -248,16 +210,3 @@ func fieldPathElement(field protoreflect.FieldDescriptor) *validatepb.FieldPathE
 		FieldType:   descriptorpb.FieldDescriptorProto_Type(field.Kind()).Enum(),
 	}.Build()
 }
-
-// opaque is an error whose message is fixed and whose cause is hidden from
-// it: the client sees only message, and errors.As still reaches cause -- for a
-// rule that failed to compile or evaluate, the [*protovalidate.CompilationError]
-// or [*protovalidate.RuntimeError] -- for the server's own log.
-type opaque struct {
-	message string
-	cause   error
-}
-
-func (e *opaque) Error() string { return e.message }
-
-func (e *opaque) Unwrap() error { return e.cause }

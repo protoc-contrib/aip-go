@@ -29,7 +29,7 @@ concept, not by a package path.
 | [203](https://google.aip.dev/203#required) | `REQUIRED` on a request's own fields | not here — protovalidate `required` |
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 | [133](https://google.aip.dev/133), [134](https://google.aip.dev/134), [233](https://google.aip.dev/233), [234](https://google.aip.dev/234) | standard-method request shapes | ✅ `ResourceWrites` |
-| — | Connect interceptor applying all of the above | ✅ `FieldBehaviorInterceptor` |
+| — | Connect interceptor applying all of the above | ✅ `NewFieldBehaviorInterceptor` |
 
 ## Ordering, pagination and filtering
 
@@ -142,31 +142,38 @@ an unset mask names nothing rather than turning it into a create; a batch
 `ResourceCreate` (the `<resource>_id`) or a `ResourceUpdate` (the
 `update_mask`).
 
-`FieldBehaviorInterceptor` is a `connect.Interceptor` applying all of it on the
-server, with fixed behavior:
+`NewFieldBehaviorInterceptor` returns a `connect.ServerInterceptor`
+([connect-go v2](https://github.com/connectrpc/connect-go)) applying all of it on
+the server, with fixed behavior:
 
-| RPC | Request | Response |
-| --- | --- | --- |
-| unary | clear `OUTPUT_ONLY`; on a create, an omitted `<resource>_id` becomes a UUIDv7; on an update, an omitted mask becomes `ImpliedFieldMask` and an explicit one drops its `OUTPUT_ONLY` paths (`ClearFieldMask`); then protovalidate plus `REQUIRED` (every field on a create, the masked ones on an update), as one `InvalidArgument` with a `buf.validate.Violations` detail and a `google.rpc.BadRequest` | clear `INPUT_ONLY` |
-| streaming | clear `OUTPUT_ONLY` on every message received | clear `INPUT_ONLY` on every message sent |
+| Every message received | Every message sent |
+| --- | --- |
+| clear `OUTPUT_ONLY`; on a create, an omitted `<resource>_id` becomes a UUIDv7; on an update, an omitted mask becomes `ImpliedFieldMask` and an explicit one drops its `OUTPUT_ONLY` paths (`ClearFieldMask`); then protovalidate plus `REQUIRED` (every field on a create, the masked ones on an update), as one `InvalidArgument` with a `buf.validate.Violations` detail and a `google.rpc.BadRequest` | clear `INPUT_ONLY` |
 
-Streams have no standard-method shape, so nothing is filled in or validated on
-them.
+It acts on every message of every RPC, unary or streamed. A message that is not
+a standard-method request — a resource streamed on its own — has nothing filled
+in or checked for `REQUIRED`; only clearing and its protovalidate rules apply.
+The error is returned from the handler's `Receive`, so a message that fails
+validation never reaches it: a streaming handler returns any `Receive` error
+other than `io.EOF`.
 
 **A create's name is the handler's to build.** AIP-133 has the server form the
 name from the request's `parent` and the id; the interceptor only fills in an
 omitted id. The handler reads both from the request — e.g. the generated
 `ParseItemID()` and `ParseParent()` — and the `name` a response returns comes
 from storage, so the resource's `name` and `parent` on the request are left as
-they arrive. A client passes through untouched. Clearing changes messages in place,
-including the response a handler returns and every message it sends.
+they arrive. It is a server interceptor, so it never acts on a client. Clearing
+changes messages in place, including the response a handler returns and every
+message it sends.
 
 ```go
 fields, err := aip.NewFieldBehaviorInterceptor()
 if err != nil {
 	return err
 }
-path, handler := acmev1connect.NewBookServiceHandler(svc, connect.WithInterceptors(fields))
+server := connect.NewServer(fields)
+acmev1connect.RegisterBookServiceHandler(server, svc)
+connecthttp.Mount(mux, server)
 ```
 
 A `REQUIRED` field left unset reads exactly as protovalidate's own `required`
