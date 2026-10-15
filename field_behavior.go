@@ -302,11 +302,19 @@ func isSingularMessage(field protoreflect.FieldDescriptor) bool {
 }
 
 // fieldPath returns at extended with the fields the dotted name walks through,
-// starting from message.
+// starting from message. It panics, naming the message and the segment, if one
+// is no field of the message it is looked up in, or if a message is expected
+// of a field that holds none.
 func fieldPath(at protopath.Path, message protoreflect.MessageDescriptor, name string) protopath.Path {
 	path := append(protopath.Path(nil), at...)
 	for segment := range strings.SplitSeq(name, ".") {
+		if message == nil {
+			panic(fmt.Sprintf("aip.FieldPath: %q is not a message, so %q is no field of it", dottedPath(path), segment))
+		}
 		field := message.Fields().ByName(protoreflect.Name(segment))
+		if field == nil {
+			panic(fmt.Sprintf("aip.FieldPath: %s has no field %q", message.FullName(), segment))
+		}
 		path = append(path, protopath.FieldAccess(field))
 		message = field.Message()
 	}

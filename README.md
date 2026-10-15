@@ -226,6 +226,37 @@ import of this package to conform. It deliberately omits `Parent()`, which
 returns a *concrete* parent type and is the main reason to use the generated
 type directly when you know it.
 
+## Naming the invalid field
+
+An `InvalidArgument` says which request field is wrong, as a
+`google.rpc.BadRequest` field violation. `aip.FieldError` carries that with the
+error, so the code that fails knows its own field, and the handler that answers
+need not type it:
+
+```go
+func (x *GetBookRequest) ParseName() (BookName, error) {
+	name, err := ParseBookName(x.GetName())
+	if err != nil {
+		return BookName{}, aip.NewFieldError(x, "name", err)
+	}
+	return name, nil
+}
+
+var field *aip.FieldError
+if errors.As(err, &field) {
+	// field.Field(): "name", "book.name", "requests[1].name"
+	// field.Err: why, for the log -- it can carry the request's value
+}
+```
+
+The field is a `protopath.Path`, as `FieldBehaviorError`'s are, built by
+`aip.FieldPath(message, "book.name")` from proto field names (not JSON names)
+and checked against the descriptor: a name that is no field of the message, or
+that walks through a field holding no message, panics, naming the message and
+the segment, so a typo fails the first test that runs it instead of naming a
+field that does not exist. `Field()` is the path without its root, with list
+indices in brackets.
+
 ## Development
 
 ```bash
