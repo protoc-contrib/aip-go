@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
@@ -104,6 +105,24 @@ func violations(err error) []string {
 	return found
 }
 
+// fieldViolations returns the field and description of each field violation
+// in the google.rpc.BadRequest detail err carries.
+func fieldViolations(err error) []string {
+	var cerr *connect.Error
+	Expect(errors.As(err, &cerr)).To(BeTrue(), "%v is not a *connect.Error", err)
+	var found []string
+	for _, detail := range cerr.Details() {
+		value, err := detail.Value()
+		Expect(err).NotTo(HaveOccurred())
+		if v, ok := value.(*errdetails.BadRequest); ok {
+			for _, violation := range v.GetFieldViolations() {
+				found = append(found, violation.GetField()+": "+violation.GetDescription())
+			}
+		}
+	}
+	return found
+}
+
 var _ = Describe("FieldBehaviorInterceptor", func() {
 	var (
 		service *bookService
@@ -182,6 +201,18 @@ var _ = Describe("FieldBehaviorInterceptor", func() {
 			Expect(service.received).To(BeEmpty())
 		})
 
+		It("carries the same violations as a google.rpc.BadRequest", func(ctx SpecContext) {
+			_, err := client.CreateBook(ctx, connect.NewRequest(&testpb.CreateBookRequest{
+				Parent: "not-a-shelf",
+				Book:   &testpb.Book{},
+			}))
+			Expect(fieldViolations(err)).To(HaveExactElements(
+				HavePrefix("parent: "),
+				Equal("book.title: value is required"),
+				Equal("book.author: value is required"),
+			))
+		})
+
 		It("reads like protovalidate's own `required` violation", func(ctx SpecContext) {
 			_, err := client.CreateBook(ctx, connect.NewRequest(&testpb.CreateBookRequest{
 				Parent: "shelves/a",
@@ -232,6 +263,7 @@ var _ = Describe("FieldBehaviorInterceptor", func() {
 				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}},
 			}))
 			Expect(violations(err)).To(Equal([]string{"book.title required"}))
+			Expect(fieldViolations(err)).To(Equal([]string{"book.title: value is required"}))
 		})
 	})
 
