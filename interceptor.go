@@ -72,26 +72,12 @@ func (s *fieldBehaviorStream) Receive(message any) error {
 		return nil
 	}
 	ClearFields(request, OutputOnly)
-	implyRequest(request)
-	return validate(s.validator, request)
-}
-
-func (s *fieldBehaviorStream) Send(message any) error {
-	if response, ok := message.(proto.Message); ok {
-		ClearFields(response, InputOnly)
-	}
-	return s.ServerStream.Send(message)
-}
-
-// implyRequest fills in what AIP leaves to the server on each resource request
-// writes: a create's omitted id, an update's omitted mask. An update's explicit
-// mask loses its OUTPUT_ONLY paths, which AIP-203 has a server ignore rather
-// than reject; a mask left empty by that writes nothing, and is not implied
-// instead. A create's name is
-// the server's to build from the request's `parent` and that id (AIP-133):
-// the handler reads both from the request, and the name a response returns
-// comes from storage.
-func implyRequest(request proto.Message) {
+	// Fill in what AIP leaves to the server on each resource the request
+	// writes: a create's omitted id (AIP-133), an update's omitted mask
+	// (AIP-134). An explicit mask loses its OUTPUT_ONLY paths, which AIP-203
+	// has a server ignore rather than reject; a mask left empty by that
+	// writes nothing, and is not implied instead. A create's name is the
+	// handler's to build from the request's parent and that id.
 	for write := range ResourceWrites(request) {
 		switch {
 		case write.Create != nil:
@@ -107,6 +93,14 @@ func implyRequest(request proto.Message) {
 			}
 		}
 	}
+	return s.validate(request)
+}
+
+func (s *fieldBehaviorStream) Send(message any) error {
+	if response, ok := message.(proto.Message); ok {
+		ClearFields(response, InputOnly)
+	}
+	return s.ServerStream.Send(message)
 }
 
 // validate returns nil when request passes protovalidate and leaves no
@@ -117,9 +111,9 @@ func implyRequest(request proto.Message) {
 // rule that fails to compile or evaluate is the server's fault: Internal,
 // with the fixed message "validation failed" and the diagnostic as its cause,
 // which never reaches the client.
-func validate(validator protovalidate.Validator, request proto.Message) error {
+func (s *fieldBehaviorStream) validate(request proto.Message) error {
 	var violations []*protovalidate.Violation
-	if err := validator.Validate(request); err != nil {
+	if err := s.validator.Validate(request); err != nil {
 		var verr *protovalidate.ValidationError
 		if !errors.As(err, &verr) {
 			return connect.NewError(connect.CodeInternal, "validation failed").WithCause(err)

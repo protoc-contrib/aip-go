@@ -22,7 +22,9 @@ func (v failingValidator) Validate(proto.Message, ...protovalidate.ValidationOpt
 var _ = Describe("FieldBehaviorInterceptor validation", func() {
 	It("reports a rule that fails to compile as Internal, without its diagnostic", func() {
 		cause := &protovalidate.CompilationError{}
-		err := validate(failingValidator{err: cause}, &testpb.UpdateBookRequest{Book: &testpb.Book{Name: "books/dune"}})
+		stream := &fieldBehaviorStream{validator: failingValidator{err: cause}}
+
+		err := stream.validate(&testpb.UpdateBookRequest{Book: &testpb.Book{Name: "books/dune"}})
 
 		var cerr *connect.Error
 		Expect(errors.As(err, &cerr)).To(BeTrue())
