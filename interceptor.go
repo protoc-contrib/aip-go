@@ -8,6 +8,7 @@ import (
 	validatepb "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protopath"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -27,8 +28,8 @@ import (
 //     protovalidate and reports every REQUIRED field each resource leaves unset
 //     — all of them on a create, those the mask names on an update — in one
 //     [connect.CodeInvalidArgument] error carrying the violations as a
-//     buf.validate.Violations detail; and clears INPUT_ONLY fields from the
-//     response.
+//     buf.validate.Violations detail and as AIP-193's google.rpc.BadRequest;
+//     and clears INPUT_ONLY fields from the response.
 //   - On a streaming RPC it clears OUTPUT_ONLY fields from every message the
 //     server receives and INPUT_ONLY fields from every message it sends.
 //     Streams have no standard-method shape, so nothing is filled in or
@@ -143,7 +144,8 @@ func implyRequest(request proto.Message) {
 // validate returns nil when request passes protovalidate and leaves no
 // REQUIRED field of the resources it writes unset, and otherwise one
 // InvalidArgument error holding every violation, protovalidate's first, as a
-// [*protovalidate.ValidationError] with a buf.validate.Violations detail. A
+// [*protovalidate.ValidationError] with a buf.validate.Violations detail and a
+// google.rpc.BadRequest one (see badRequest). A
 // rule that fails to compile or evaluate is the server's fault: Internal,
 // with the fixed message "validation failed" and the diagnostic only under it
 // (see opaque).
@@ -176,7 +178,24 @@ func (i *FieldBehaviorInterceptor) validate(request proto.Message) error {
 	if detail, err := connect.NewErrorDetail(verr.ToProto()); err == nil {
 		cerr.AddDetail(detail)
 	}
+	if detail, err := connect.NewErrorDetail(badRequest(violations)); err == nil {
+		cerr.AddDetail(detail)
+	}
 	return cerr
+}
+
+// badRequest returns violations as AIP-193's google.rpc.BadRequest, the
+// standard detail for the fields a request got wrong: a field violation per
+// violation, with its field path and its message.
+func badRequest(violations []*protovalidate.Violation) *errdetails.BadRequest {
+	request := &errdetails.BadRequest{}
+	for _, violation := range violations {
+		request.FieldViolations = append(request.FieldViolations, &errdetails.BadRequest_FieldViolation{
+			Field:       protovalidate.FieldPathString(violation.Proto.GetField()),
+			Description: violation.Proto.GetMessage(),
+		})
+	}
+	return request
 }
 
 // requiredRuleDescriptor and requiredRule are `(buf.validate.field).required`,

@@ -147,7 +147,7 @@ server, with fixed behavior:
 
 | RPC | Request | Response |
 | --- | --- | --- |
-| unary | clear `OUTPUT_ONLY`; on a create, an omitted `<resource>_id` becomes a UUIDv7; on an update, an omitted mask becomes `ImpliedFieldMask` and an explicit one drops its `OUTPUT_ONLY` paths (`ClearFieldMask`); then protovalidate plus `REQUIRED` (every field on a create, the masked ones on an update), as one `InvalidArgument` with a `buf.validate.Violations` detail | clear `INPUT_ONLY` |
+| unary | clear `OUTPUT_ONLY`; on a create, an omitted `<resource>_id` becomes a UUIDv7; on an update, an omitted mask becomes `ImpliedFieldMask` and an explicit one drops its `OUTPUT_ONLY` paths (`ClearFieldMask`); then protovalidate plus `REQUIRED` (every field on a create, the masked ones on an update), as one `InvalidArgument` with a `buf.validate.Violations` detail and a `google.rpc.BadRequest` | clear `INPUT_ONLY` |
 | streaming | clear `OUTPUT_ONLY` on every message received | clear `INPUT_ONLY` on every message sent |
 
 Streams have no standard-method shape, so nothing is filled in or validated on
@@ -172,7 +172,10 @@ path, handler := acmev1connect.NewBookServiceHandler(svc, connect.WithIntercepto
 A `REQUIRED` field left unset reads exactly as protovalidate's own `required`
 violation — rule id `required`, message `value is required` — in the same error
 as the request's protovalidate violations: `validation error: book.title: value
-is required`. For a different policy — other kinds, IMMUTABLE cleared on update,
+is required`. The error carries the violations twice: as `buf.validate.Violations`,
+with protovalidate's rule ids, and as AIP-193's `google.rpc.BadRequest` — a field
+violation per violation, its path and message (`book.title`, `value is required`)
+— the detail any AIP client reads. For a different policy — other kinds, IMMUTABLE cleared on update,
 another id scheme — build an interceptor from `ClearFields`, `ValidateFields`,
 `ImpliedFieldMask`, `ClearFieldMask` and `ResourceWrites`; `ResourceCreate.SetID` sets an id of
 your own scheme.

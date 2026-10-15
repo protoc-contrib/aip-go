@@ -33,7 +33,8 @@
 // mask. [FieldBehaviorInterceptor] is a connect.Interceptor applying
 // it all on the server with fixed behavior: on a unary RPC, clear OUTPUT_ONLY,
 // fill in a create's omitted id and an update's omitted mask, validate with
-// protovalidate and REQUIRED as one InvalidArgument error, and clear
+// protovalidate and REQUIRED as one InvalidArgument error (with
+// buf.validate.Violations and google.rpc.BadRequest details), and clear
 // INPUT_ONLY from the response; on a stream, clear OUTPUT_ONLY on every
 // message received and INPUT_ONLY on every message sent. For another policy,
 // build an interceptor from the primitives and [ResourceWrites]. A create's
