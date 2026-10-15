@@ -2,6 +2,7 @@ package aip_test
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protopath"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -329,5 +331,82 @@ var _ = Describe("FieldBehavior", func() {
 			Expect(proto.Equal(shipment, before)).To(BeTrue())
 			Expect(proto.Equal(paths, beforeMask)).To(BeTrue())
 		})
+	})
+})
+
+var _ = Describe("FieldError", func() {
+	shipment := &testpb.Shipment{}
+
+	Describe("FieldPath", func() {
+		It("starts at the message and names each field it walks through", func() {
+			path := aip.FieldPath(shipment, "carrier.name")
+			Expect(path.String()).To(Equal("(tests.Shipment).carrier.name"))
+			Expect(path[0].Kind()).To(Equal(protopath.RootStep))
+			Expect(path).To(HaveLen(3))
+		})
+
+		It("takes a typed-nil message", func() {
+			Expect(aip.FieldPath((*testpb.Shipment)(nil), "origin").String()).To(Equal("(tests.Shipment).origin"))
+		})
+
+		It("descends into a repeated message field's element type", func() {
+			Expect(aip.FieldPath(shipment, "line_items.sku").String()).To(Equal("(tests.Shipment).line_items.sku"))
+		})
+
+		It("panics, naming the message and the field, for a name that is no field", func() {
+			Expect(func() { aip.FieldPath(shipment, "colection") }).To(PanicWith(
+				`aip.FieldPath: tests.Shipment has no field "colection"`,
+			))
+			Expect(func() { aip.FieldPath(shipment, "carrier.nme") }).To(PanicWith(
+				`aip.FieldPath: tests.Carrier has no field "nme"`,
+			))
+		})
+
+		It("panics for a name that walks through a field that holds no message", func() {
+			Expect(func() { aip.FieldPath(shipment, "origin.name") }).To(PanicWith(
+				`aip.FieldPath: "origin" is not a message, so "name" is no field of it`,
+			))
+		})
+	})
+
+	Describe("Field", func() {
+		It("renders the path without its root", func() {
+			Expect(aip.NewFieldError(shipment, "origin", errors.New("x")).Field()).To(Equal("origin"))
+			Expect(aip.NewFieldError(shipment, "carrier.name", errors.New("x")).Field()).To(Equal("carrier.name"))
+		})
+
+		It("renders a list index in brackets", func() {
+			lineItems := shipment.ProtoReflect().Descriptor().Fields().ByName("line_items")
+			sku := lineItems.Message().Fields().ByName("sku")
+			path := protopath.Path{
+				protopath.Root(shipment.ProtoReflect().Descriptor()),
+				protopath.FieldAccess(lineItems),
+				protopath.ListIndex(1),
+				protopath.FieldAccess(sku),
+			}
+			Expect((&aip.FieldError{Path: path}).Field()).To(Equal("line_items[1].sku"))
+		})
+	})
+
+	Describe("Error", func() {
+		It("names the field and why", func() {
+			err := aip.NewFieldError(shipment, "carrier.name", errors.New(`parse "x": bad segment`))
+			Expect(err).To(MatchError(`carrier.name: parse "x": bad segment`))
+		})
+
+		It("names the field alone when there is no cause", func() {
+			Expect(aip.NewFieldError(shipment, "origin", nil)).To(MatchError("origin"))
+		})
+	})
+
+	It("is found through a wrapped chain, and unwraps to its cause", func() {
+		cause := errors.New("bad segment")
+		err := fmt.Errorf("handler: %w", aip.NewFieldError(shipment, "origin", cause))
+
+		var field *aip.FieldError
+		Expect(errors.As(err, &field)).To(BeTrue())
+		Expect(field.Field()).To(Equal("origin"))
+		Expect(field.Unwrap()).To(BeIdenticalTo(cause))
+		Expect(errors.Is(err, cause)).To(BeTrue())
 	})
 })
