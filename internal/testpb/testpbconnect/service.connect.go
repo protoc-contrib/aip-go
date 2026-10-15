@@ -38,6 +38,8 @@ const (
 	BookServiceGetBookProcedure = "/tests.BookService/GetBook"
 	// BookServiceSyncBooksProcedure is the procedure name of the BookService's SyncBooks RPC.
 	BookServiceSyncBooksProcedure = "/tests.BookService/SyncBooks"
+	// BookServiceImportBooksProcedure is the procedure name of the BookService's ImportBooks RPC.
+	BookServiceImportBooksProcedure = "/tests.BookService/ImportBooks"
 )
 
 var (
@@ -76,6 +78,13 @@ var (
 			Procedure:  BookServiceSyncBooksProcedure,
 		}
 	})
+	bookServiceImportBooksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeBidi,
+			Schema:     testpb.File_internal_testpb_service_proto.Services().ByName("BookService").Methods().ByName("ImportBooks"),
+			Procedure:  BookServiceImportBooksProcedure,
+		}
+	})
 )
 
 // BookServiceClient is a client for the tests.BookService service.
@@ -85,6 +94,7 @@ type BookServiceClient interface {
 	BatchCreateBooks(context.Context, *testpb.BatchCreateBooksRequest) (*testpb.BatchCreateBooksResponse, error)
 	GetBook(context.Context, *testpb.GetBookRequest) (*testpb.Book, error)
 	SyncBooks(context.Context) (BookServiceSyncBooksClientStream, error)
+	ImportBooks(context.Context) (BookServiceImportBooksClientStream, error)
 }
 
 // NewBookServiceClient constructs a client for the tests.BookService service. Multiple service
@@ -129,6 +139,42 @@ func (s BookServiceSyncBooksClientStream) Close() error {
 	return s.stream.Close()
 }
 
+// BookServiceImportBooksClientStream is the client stream for the BookService's ImportBooks RPC.
+type BookServiceImportBooksClientStream struct {
+	stream connect.ClientStream
+}
+
+// SendHeaders opens the stream and flushes the request headers without a message. The first Send or
+// Receive does this implicitly.
+func (s BookServiceImportBooksClientStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a request message to the server.
+func (s BookServiceImportBooksClientStream) Send(req *testpb.CreateBookRequest) error {
+	return s.stream.Send(req)
+}
+
+// CloseSend closes the request side of the stream.
+func (s BookServiceImportBooksClientStream) CloseSend() error {
+	return s.stream.CloseSend()
+}
+
+// Receive returns the next response message from the server.
+func (s BookServiceImportBooksClientStream) Receive() (*testpb.Book, error) {
+	var res testpb.Book
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BookServiceImportBooksClientStream) Close() error {
+	return s.stream.Close()
+}
+
 // BookServiceHandler is an implementation of the tests.BookService service.
 type BookServiceHandler interface {
 	CreateBook(context.Context, *testpb.CreateBookRequest) (*testpb.Book, error)
@@ -136,6 +182,7 @@ type BookServiceHandler interface {
 	BatchCreateBooks(context.Context, *testpb.BatchCreateBooksRequest) (*testpb.BatchCreateBooksResponse, error)
 	GetBook(context.Context, *testpb.GetBookRequest) (*testpb.Book, error)
 	SyncBooks(context.Context, BookServiceSyncBooksServerStream) error
+	ImportBooks(context.Context, BookServiceImportBooksServerStream) error
 }
 
 // RegisterBookServiceHandler registers svc as the tests.BookService implementation on server.
@@ -147,6 +194,7 @@ func RegisterBookServiceHandler(server *connect.Server, svc BookServiceHandler) 
 		connect.Method{Spec: bookServiceBatchCreateBooksSpec(), Handler: adapter.batchCreateBooks},
 		connect.Method{Spec: bookServiceGetBookSpec(), Handler: adapter.getBook},
 		connect.Method{Spec: bookServiceSyncBooksSpec(), Handler: adapter.syncBooks},
+		connect.Method{Spec: bookServiceImportBooksSpec(), Handler: adapter.importBooks},
 	)
 }
 
@@ -174,6 +222,30 @@ func (s BookServiceSyncBooksServerStream) Send(res *testpb.Book) error {
 	return s.stream.Send(res)
 }
 
+// BookServiceImportBooksServerStream is the server stream for the BookService's ImportBooks RPC.
+type BookServiceImportBooksServerStream struct {
+	stream connect.ServerStream
+}
+
+// Receive returns the next request message from the client.
+func (s BookServiceImportBooksServerStream) Receive() (*testpb.CreateBookRequest, error) {
+	var req testpb.CreateBookRequest
+	if err := s.stream.Receive(&req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BookServiceImportBooksServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BookServiceImportBooksServerStream) Send(res *testpb.Book) error {
+	return s.stream.Send(res)
+}
+
 // UnimplementedBookServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBookServiceHandler struct{}
 
@@ -195,6 +267,10 @@ func (UnimplementedBookServiceHandler) GetBook(context.Context, *testpb.GetBookR
 
 func (UnimplementedBookServiceHandler) SyncBooks(context.Context, BookServiceSyncBooksServerStream) error {
 	return connect.NewError(connect.CodeUnimplemented, "tests.BookService.SyncBooks is not implemented")
+}
+
+func (UnimplementedBookServiceHandler) ImportBooks(context.Context, BookServiceImportBooksServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "tests.BookService.ImportBooks is not implemented")
 }
 
 type bookServiceClient struct {
@@ -239,6 +315,14 @@ func (c *bookServiceClient) SyncBooks(ctx context.Context) (BookServiceSyncBooks
 		return BookServiceSyncBooksClientStream{}, err
 	}
 	return BookServiceSyncBooksClientStream{stream: stream}, nil
+}
+
+func (c *bookServiceClient) ImportBooks(ctx context.Context) (BookServiceImportBooksClientStream, error) {
+	stream, err := c.client.CallClientStream(ctx, bookServiceImportBooksSpec())
+	if err != nil {
+		return BookServiceImportBooksClientStream{}, err
+	}
+	return BookServiceImportBooksClientStream{stream: stream}, nil
 }
 
 type bookServiceHandler struct{ svc BookServiceHandler }
@@ -293,4 +377,8 @@ func (h bookServiceHandler) getBook(ctx context.Context, _ connect.Spec, stream 
 
 func (h bookServiceHandler) syncBooks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
 	return h.svc.SyncBooks(ctx, BookServiceSyncBooksServerStream{stream: stream})
+}
+
+func (h bookServiceHandler) importBooks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	return h.svc.ImportBooks(ctx, BookServiceImportBooksServerStream{stream: stream})
 }

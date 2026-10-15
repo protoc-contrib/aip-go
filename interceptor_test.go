@@ -3,6 +3,7 @@ package aip_test
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -78,11 +79,30 @@ func (s *bookService) GetBook(_ context.Context, req *testpb.GetBookRequest) (*t
 func (s *bookService) SyncBooks(_ context.Context, stream testpbconnect.BookServiceSyncBooksServerStream) error {
 	for {
 		book, err := stream.Receive()
-		if err != nil {
-			return nil //nolint:nilerr // the client closed its side
+		switch {
+		case errors.Is(err, io.EOF):
+			return nil // the client closed its side
+		case err != nil:
+			return err // the interceptor refused the message
 		}
 		s.record(book)
 		if err := stream.Send(returned(book)); err != nil {
+			return err
+		}
+	}
+}
+
+func (s *bookService) ImportBooks(_ context.Context, stream testpbconnect.BookServiceImportBooksServerStream) error {
+	for {
+		request, err := stream.Receive()
+		switch {
+		case errors.Is(err, io.EOF):
+			return nil // the client closed its side
+		case err != nil:
+			return err // the interceptor refused the message
+		}
+		s.record(request)
+		if err := stream.Send(returned(request.GetBook())); err != nil {
 			return err
 		}
 	}
@@ -326,5 +346,28 @@ var _ = Describe("FieldBehaviorInterceptor", func() {
 		}
 		Expect(stream.CloseSend()).To(Succeed())
 		Expect(stream.Close()).To(Succeed())
+	})
+
+	It("fills in and validates every streamed request, failing the stream on an invalid one", func(ctx SpecContext) {
+		stream, err := client.ImportBooks(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(stream.Close)
+
+		Expect(stream.Send(&testpb.CreateBookRequest{
+			Parent: "shelves/a",
+			Book:   &testpb.Book{Title: "Dune", Author: "Herbert"},
+		})).To(Succeed())
+		_, err = stream.Receive()
+		Expect(err).NotTo(HaveOccurred())
+		id, err := uuid.Parse(service.last().(*testpb.CreateBookRequest).GetBookId())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(id[6] >> 4).To(Equal(byte(7)))
+
+		Expect(stream.Send(&testpb.CreateBookRequest{
+			Parent: "shelves/a",
+			Book:   &testpb.Book{Author: "Herbert"},
+		})).To(Succeed())
+		_, err = stream.Receive()
+		Expect(violations(err)).To(Equal([]string{"book.title required"}))
 	})
 })

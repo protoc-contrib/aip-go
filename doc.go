@@ -31,12 +31,12 @@
 // (AIP-133), an update (AIP-134), a batch of either (AIP-233, AIP-234) — and
 // yields the resources a request writes, with their create id or update
 // mask. [NewFieldBehaviorInterceptor] returns a connect.ServerInterceptor
-// (connect-go v2) applying it all on the server with fixed behavior: on a unary RPC, clear OUTPUT_ONLY,
-// fill in a create's omitted id and an update's omitted mask, validate with
-// protovalidate and REQUIRED as one InvalidArgument error (with
-// buf.validate.Violations and google.rpc.BadRequest details), and clear
-// INPUT_ONLY from the response; on a stream, clear OUTPUT_ONLY on every
-// message received and INPUT_ONLY on every message sent. For another policy,
+// (connect-go v2) applying it all on the server with fixed behavior, to every
+// message of every RPC, unary or streamed: on each message received, clear
+// OUTPUT_ONLY, fill in a create's omitted id and an update's omitted mask, and
+// validate with protovalidate and REQUIRED as one InvalidArgument error (with
+// buf.validate.Violations and google.rpc.BadRequest details); on each message
+// sent, clear INPUT_ONLY. For another policy,
 // build an interceptor from the primitives and [ResourceWrites]. A create's
 // name is the server's to build from the request's `parent` and its id
 // (AIP-133): the handler reads both from the request, and the name a response

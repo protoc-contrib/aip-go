@@ -18,26 +18,28 @@ import (
 )
 
 // NewFieldBehaviorInterceptor returns a [connect.ServerInterceptor] that
-// applies AIP field behavior on the server. Its behavior is fixed:
+// applies AIP field behavior on the server, to every message of every RPC,
+// unary or streamed. Its behavior is fixed:
 //
-//   - On a unary RPC it clears OUTPUT_ONLY fields from the request; fills in
-//     what AIP leaves to the server on each resource the request writes
+//   - Each message the server receives has its OUTPUT_ONLY fields cleared;
+//     what AIP leaves to the server is filled in on each resource it writes
 //     ([ResourceWrites]) — a create's omitted `<resource>_id` becomes a UUIDv7
 //     (AIP-133), an update's omitted mask becomes [ImpliedFieldMask]
 //     (AIP-134), and the OUTPUT_ONLY paths of an update's explicit mask are
-//     removed with [ClearFieldMask] (AIP-203); then validates the request with
-//     protovalidate and reports every REQUIRED field each resource leaves unset
-//     — all of them on a create, those the mask names on an update — in one
-//     [connect.CodeInvalidArgument] error carrying the violations as a
-//     buf.validate.Violations detail and as AIP-193's google.rpc.BadRequest;
-//     and clears INPUT_ONLY fields from the response.
-//   - On a streaming RPC it clears OUTPUT_ONLY fields from every message the
-//     server receives and INPUT_ONLY fields from every message it sends.
-//     Streams have no standard-method shape, so nothing is filled in or
-//     validated.
+//     removed with [ClearFieldMask] (AIP-203); then it is validated with
+//     protovalidate, and every REQUIRED field each resource leaves unset —
+//     all of them on a create, those the mask names on an update — is
+//     reported in one [connect.CodeInvalidArgument] error carrying the
+//     violations as a buf.validate.Violations detail and as AIP-193's
+//     google.rpc.BadRequest. The error is returned from the handler's
+//     Receive, so a message that fails validation never reaches it.
+//   - Each message the server sends has its INPUT_ONLY fields cleared.
 //
-// Clearing changes the messages in place, including the response the handler
-// returns and every message it sends. For a different policy, build an
+// A message that is not a standard-method request, such as a resource
+// streamed on its own, has nothing filled in or checked for REQUIRED; only
+// clearing and its protovalidate rules apply. Clearing changes the messages in
+// place, including the response the handler returns and every message it
+// sends. For a different policy, build an
 // interceptor from [ClearFields], [ValidateFields], [ImpliedFieldMask],
 // [ClearFieldMask] and [ResourceWrites].
 //
@@ -47,32 +49,18 @@ func NewFieldBehaviorInterceptor() (connect.ServerInterceptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	behavior := &fieldBehavior{validator: validator}
 	return func(next connect.ServerFunc) connect.ServerFunc {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
-			return next(ctx, spec, &fieldBehaviorStream{
-				ServerStream:  stream,
-				fieldBehavior: behavior,
-				unary:         spec.StreamType == connect.StreamTypeUnary,
-			})
+			return next(ctx, spec, &fieldBehaviorStream{ServerStream: stream, validator: validator})
 		}
 	}, nil
 }
 
-// fieldBehavior holds what the interceptor validates requests with.
-type fieldBehavior struct {
-	validator protovalidate.Validator
-}
-
-// fieldBehaviorStream applies field behavior to the messages of one RPC: it
-// clears what a client may not write from every message the server receives,
-// and what it may not read from every message the server sends. A unary RPC's
-// request is also filled in and validated as it is received, so a request that
-// fails validation never reaches the handler.
+// fieldBehaviorStream applies field behavior to the messages of one RPC, as
+// [NewFieldBehaviorInterceptor] describes.
 type fieldBehaviorStream struct {
 	connect.ServerStream
-	*fieldBehavior
-	unary bool
+	validator protovalidate.Validator
 }
 
 func (s *fieldBehaviorStream) Receive(message any) error {
@@ -84,11 +72,8 @@ func (s *fieldBehaviorStream) Receive(message any) error {
 		return nil
 	}
 	ClearFields(request, OutputOnly)
-	if !s.unary {
-		return nil
-	}
 	implyRequest(request)
-	return s.validate(request)
+	return validate(s.validator, request)
 }
 
 func (s *fieldBehaviorStream) Send(message any) error {
@@ -132,9 +117,9 @@ func implyRequest(request proto.Message) {
 // rule that fails to compile or evaluate is the server's fault: Internal,
 // with the fixed message "validation failed" and the diagnostic as its cause,
 // which never reaches the client.
-func (b *fieldBehavior) validate(request proto.Message) error {
+func validate(validator protovalidate.Validator, request proto.Message) error {
 	var violations []*protovalidate.Violation
-	if err := b.validator.Validate(request); err != nil {
+	if err := validator.Validate(request); err != nil {
 		var verr *protovalidate.ValidationError
 		if !errors.As(err, &verr) {
 			return connect.NewError(connect.CodeInternal, "validation failed").WithCause(err)

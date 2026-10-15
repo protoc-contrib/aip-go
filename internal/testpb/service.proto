@@ -21,6 +21,7 @@ service BookService {
   rpc BatchCreateBooks(BatchCreateBooksRequest) returns (BatchCreateBooksResponse);
   rpc GetBook(GetBookRequest) returns (Book);
   rpc SyncBooks(stream Book) returns (stream Book);
+  rpc ImportBooks(stream CreateBookRequest) returns (stream Book);
 }
 
 // Book is a top-level resource: its name is `books/<id>`.
