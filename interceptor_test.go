@@ -242,7 +242,8 @@ var _ = Describe("FieldBehaviorInterceptor", func() {
 				Parent: "shelves/a",
 				Book:   &testpb.Book{Author: "Herbert"},
 			})
-			Expect(err).To(MatchError(ContainSubstring("validation error: book.title: value is required")))
+			Expect(err).To(MatchError(ContainSubstring("The request contains invalid parameters")))
+			Expect(fieldViolations(err)).To(Equal([]string{"book.title: value is required"}))
 		})
 	})
 

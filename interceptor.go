@@ -105,9 +105,11 @@ func (s *fieldBehaviorStream) Send(message any) error {
 
 // validate returns nil when request passes protovalidate and leaves no
 // REQUIRED field of the resources it writes unset, and otherwise one
-// InvalidArgument error holding every violation, protovalidate's first, as a
-// [*protovalidate.ValidationError] with a buf.validate.Violations detail and a
-// google.rpc.BadRequest one (see badRequest). A
+// InvalidArgument error with the fixed message "The request contains invalid
+// parameters", holding every violation, protovalidate's first, in a
+// buf.validate.Violations detail and a google.rpc.BadRequest one (see
+// badRequest), with the [*protovalidate.ValidationError] as its cause. The
+// message names no field: AIP-193 has what varies in the details. A
 // rule that fails to compile or evaluate is the server's fault: Internal,
 // with the fixed message "validation failed" and the diagnostic as its cause,
 // which never reaches the client.
@@ -136,7 +138,7 @@ func (s *fieldBehaviorStream) validate(request proto.Message) error {
 		return nil
 	}
 	verr := &protovalidate.ValidationError{Violations: violations}
-	cerr := connect.NewError(connect.CodeInvalidArgument, verr.Error()).WithCause(verr)
+	cerr := connect.NewError(connect.CodeInvalidArgument, "The request contains invalid parameters").WithCause(verr)
 	if detail, err := connectproto.NewErrorDetail(verr.ToProto()); err == nil {
 		cerr = cerr.WithDetail(detail)
 	}

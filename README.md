@@ -178,11 +178,12 @@ connecthttp.Mount(mux, server)
 
 A `REQUIRED` field left unset reads exactly as protovalidate's own `required`
 violation — rule id `required`, message `value is required` — in the same error
-as the request's protovalidate violations: `validation error: book.title: value
-is required`. The error carries the violations twice: as `buf.validate.Violations`,
-with protovalidate's rule ids, and as AIP-193's `google.rpc.BadRequest` — a field
-violation per violation, its path and message (`book.title`, `value is required`)
-— the detail any AIP client reads. For a different policy — other kinds, IMMUTABLE cleared on update,
+as the request's protovalidate violations. That error's message is fixed, "The
+request contains invalid parameters", and names no field: AIP-193 keeps what
+varies in the details. It carries the violations twice: as
+`buf.validate.Violations`, with protovalidate's rule ids, and as AIP-193's
+`google.rpc.BadRequest` — a field violation per violation, its path and message
+(`book.title`, `value is required`) — the detail any AIP client reads. For a different policy — other kinds, IMMUTABLE cleared on update,
 another id scheme — build an interceptor from `ClearFields`, `ValidateFields`,
 `ImpliedFieldMask`, `ClearFieldMask` and `ResourceWrites`; `ResourceCreate.SetID` sets an id of
 your own scheme.
