@@ -1,6 +1,8 @@
 package aip_test
 
 import (
+	"errors"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -131,6 +133,97 @@ var _ = Describe("ResourcePattern", func() {
 			err := pattern.Scan("projects/p1/things/t1", &project)
 			Expect(err).To(MatchError(ContainSubstring("got 1 destinations, want 2")))
 			Expect(err).NotTo(MatchError(aip.ErrInvalidResourceName))
+		})
+
+		DescribeTable("says what was wrong in a *aip.ParseError",
+			func(name string, want aip.ParseError) {
+				pattern := aip.MustCompileResourcePattern("projects/{project}/things/{thing}")
+
+				var project, thing string
+				err := pattern.Scan(name, &project, &thing)
+				perr, ok := errors.AsType[*aip.ParseError](err)
+				Expect(ok).To(BeTrue(), "%v", err)
+				want.Pattern, want.Name = "projects/{project}/things/{thing}", name
+				Expect(*perr).To(Equal(want))
+				// and it is still the sentinel
+				Expect(errors.Is(err, aip.ErrInvalidResourceName)).To(BeTrue())
+			},
+			Entry("the wrong number of segments", "projects/p1",
+				aip.ParseError{Kind: aip.ParseSegmentCount, WantSegments: 4, GotSegments: 2}),
+			Entry("a literal that does not match", "projects/p1/thing/t1",
+				aip.ParseError{Kind: aip.ParseLiteral, Index: 2, Want: "things", Got: "thing"}),
+			Entry("a variable with no value", "projects//things/t1",
+				aip.ParseError{Kind: aip.ParseEmptyValue, Index: 1, Field: "project"}),
+		)
+	})
+
+	Describe("ScanFull", func() {
+		pattern := aip.MustCompileResourcePattern("projects/{project}/things/{thing}")
+
+		It("assigns variable segments of the fully-qualified form, in pattern order", func() {
+			var project, thing string
+			Expect(pattern.ScanFull("//example.com/projects/p1/things/t1", "example.com", &project, &thing)).To(Succeed())
+			Expect(project).To(Equal("p1"))
+			Expect(thing).To(Equal("t1"))
+		})
+
+		DescribeTable("rejects a name without the prefix, against the name as given",
+			func(name string) {
+				var project, thing string
+				err := pattern.ScanFull(name, "example.com", &project, &thing)
+				perr, ok := errors.AsType[*aip.ParseError](err)
+				Expect(ok).To(BeTrue(), "%v", err)
+				Expect(*perr).To(Equal(aip.ParseError{
+					Pattern: "projects/{project}/things/{thing}", Name: name,
+					Kind: aip.ParsePrefix, Want: "//example.com/",
+				}))
+				Expect(err).To(MatchError(ContainSubstring(`bad prefix, want "//example.com/"`)))
+				Expect(errors.Is(err, aip.ErrInvalidResourceName)).To(BeTrue())
+			},
+			Entry("the relative form", "projects/p1/things/t1"),
+			Entry("another domain", "//other.com/projects/p1/things/t1"),
+			Entry("a domain that only starts the same", "//example.comx/projects/p1/things/t1"),
+			Entry("one slash", "/example.com/projects/p1/things/t1"),
+		)
+
+		It("reports a failure past the prefix against the relative part", func() {
+			var project, thing string
+			err := pattern.ScanFull("//example.com/projects/p1/thing/t1", "example.com", &project, &thing)
+			perr, ok := errors.AsType[*aip.ParseError](err)
+			Expect(ok).To(BeTrue(), "%v", err)
+			Expect(perr.Name).To(Equal("projects/p1/thing/t1"))
+			Expect(perr.Kind).To(Equal(aip.ParseLiteral))
+		})
+
+		It("leaves destinations untouched when the name does not match", func() {
+			project, thing := "before", "before"
+			Expect(pattern.ScanFull("//other.com/projects/p1/things/t1", "example.com", &project, &thing)).To(HaveOccurred())
+			Expect(project).To(Equal("before"))
+			Expect(thing).To(Equal("before"))
+		})
+	})
+
+	Describe("InvalidValue and InvalidID", func() {
+		pattern := aip.MustCompileResourcePattern("books/{book}")
+
+		It("names the variable whose value the caller refused", func() {
+			err := pattern.InvalidValue("books/seventeen", "book", errors.New("not a number"))
+			Expect(*err).To(Equal(aip.ParseError{
+				Pattern: "books/{book}", Name: "books/seventeen",
+				Kind: aip.ParseInvalidValue, Field: "book", Reason: "not a number",
+			}))
+			Expect(err).To(MatchError(
+				`invalid resource name: parse "books/seventeen" against "books/{book}": invalid value for segment (book): not a number`))
+			Expect(errors.Is(err, aip.ErrInvalidResourceName)).To(BeTrue())
+		})
+
+		It("names the request field that held a bad id, which is not a name", func() {
+			err := pattern.InvalidID("book_id", "abc", errors.New("invalid length"))
+			Expect(*err).To(Equal(aip.ParseError{
+				Pattern: "books/{book}", Name: "abc",
+				Kind: aip.ParseInvalidID, Field: "book_id", Reason: "invalid length",
+			}))
+			Expect(err).To(MatchError(`parse book_id "abc": invalid length`))
 		})
 	})
 

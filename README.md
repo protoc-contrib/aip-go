@@ -220,6 +220,25 @@ func (n BookName) Validate() error { return bookNamePattern.Validate(n.Publisher
 machine). `Format` costs about 10ns more than inlined concatenation for the
 same single allocation.
 
+`ScanFull(name, domain, …)` scans the fully-qualified form,
+`//example.com/publishers/p1/books/b1`, as `Scan` does the relative one: the
+service name is the part of the resource type before the `/`. A failure is a
+`*aip.ParseError`, which says what was wrong — `Kind` is `ParseSegmentCount`,
+`ParseLiteral`, `ParseEmptyValue` or, for a bad prefix, `ParsePrefix`, with the
+`Pattern`, the `Name` and the kind's details beside it — and is still
+`aip.ErrInvalidResourceName` to `errors.Is`:
+
+```go
+var perr *aip.ParseError
+if errors.As(err, &perr) && perr.Kind == aip.ParseLiteral {
+        // perr.Index, perr.Want, perr.Got
+}
+```
+
+`InvalidValue` and `InvalidID` build the other two kinds for a caller that
+converts a segment (`ParseInvalidValue`) or a create's bare `<resource>_id`
+(`ParseInvalidID`) and refuses it.
+
 There is deliberately no runtime parser taking a pattern string as public API:
 callers get `ParseBookName(s)`, never `Scan(s, "publishers/{publisher}/...")`.
 
