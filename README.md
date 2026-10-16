@@ -183,7 +183,11 @@ request contains invalid parameters", and names no field: AIP-193 keeps what
 varies in the details. It carries the violations twice: as
 `buf.validate.Violations`, with protovalidate's rule ids, and as AIP-193's
 `google.rpc.BadRequest` — a field violation per violation, its path and message
-(`book.title`, `value is required`) — the detail any AIP client reads. For a different policy — other kinds, IMMUTABLE cleared on update,
+(`book.title`, `value is required`) — the detail any AIP client reads. The
+`BadRequest` holds the first violations that fit in 4 KiB, as aip-rs's does, so a
+request with a great many is not answered with an error as large; the
+`buf.validate.Violations` detail is not capped (protovalidate-go has no limit),
+and has every one. For a different policy — other kinds, IMMUTABLE cleared on update,
 another id scheme — build an interceptor from `ClearFields`, `ValidateFields`,
 `ImpliedFieldMask`, `ClearFieldMask` and `ResourceWrites`; `ResourceCreate.SetID` sets an id of
 your own scheme.

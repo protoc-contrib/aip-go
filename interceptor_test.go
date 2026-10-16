@@ -127,20 +127,26 @@ func violations(err error) []string {
 	return found
 }
 
-// fieldViolations returns the field and description of each field violation
-// in the google.rpc.BadRequest detail err carries.
-func fieldViolations(err error) []string {
+// badRequestDetail returns the google.rpc.BadRequest detail err carries, or nil.
+func badRequestDetail(err error) *errdetails.BadRequest {
 	var cerr *connect.Error
 	Expect(errors.As(err, &cerr)).To(BeTrue(), "%v is not a *connect.Error", err)
-	var found []string
 	for _, detail := range cerr.Details() {
 		value, err := connectproto.UnmarshalErrorDetail(detail)
 		Expect(err).NotTo(HaveOccurred())
 		if v, ok := value.(*errdetails.BadRequest); ok {
-			for _, violation := range v.GetFieldViolations() {
-				found = append(found, violation.GetField()+": "+violation.GetDescription())
-			}
+			return v
 		}
+	}
+	return nil
+}
+
+// fieldViolations returns the field and description of each field violation
+// in the google.rpc.BadRequest detail err carries.
+func fieldViolations(err error) []string {
+	var found []string
+	for _, violation := range badRequestDetail(err).GetFieldViolations() {
+		found = append(found, violation.GetField()+": "+violation.GetDescription())
 	}
 	return found
 }
@@ -302,6 +308,29 @@ var _ = Describe("FieldBehaviorInterceptor", func() {
 				},
 			})
 			Expect(violations(err)).To(Equal([]string{"requests[1].book.title required"}))
+		})
+
+		It("holds the BadRequest to 4 KiB, a prefix of the violations, and leaves protovalidate's detail whole", func(ctx SpecContext) {
+			// Two REQUIRED violations an entry, `title` and `author`.
+			entries := make([]*testpb.CreateBookRequest, 500)
+			for i := range entries {
+				entries[i] = &testpb.CreateBookRequest{Parent: "shelves/a", Book: &testpb.Book{}}
+			}
+			_, err := client.BatchCreateBooks(ctx, &testpb.BatchCreateBooksRequest{Parent: "shelves/a", Requests: entries})
+
+			detail := badRequestDetail(err)
+			Expect(detail).NotTo(BeNil())
+			Expect(proto.Size(detail)).To(BeNumerically("<=", 4096))
+			listed := fieldViolations(err)
+			Expect(listed).NotTo(BeEmpty())
+			Expect(listed).To(HaveLen(len(detail.GetFieldViolations())))
+			Expect(len(listed)).To(BeNumerically("<", 1000))
+			Expect(listed[:2]).To(Equal([]string{
+				"requests[0].book.title: value is required",
+				"requests[0].book.author: value is required",
+			}))
+			// protovalidate-go does not cap its own detail: every violation is in it.
+			Expect(violations(err)).To(HaveLen(1000))
 		})
 
 		It("clears INPUT_ONLY fields from every resource in the response", func(ctx SpecContext) {

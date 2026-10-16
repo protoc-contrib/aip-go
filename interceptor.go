@@ -142,15 +142,25 @@ func (s *fieldBehaviorStream) validate(request proto.Message) error {
 	if detail, err := connectproto.NewErrorDetail(verr.ToProto()); err == nil {
 		cerr = cerr.WithDetail(detail)
 	}
-	if detail, err := connectproto.NewErrorDetail(badRequest(violations)); err == nil {
-		cerr = cerr.WithDetail(detail)
+	if request := badRequest(violations); len(request.GetFieldViolations()) > 0 {
+		if detail, err := connectproto.NewErrorDetail(request); err == nil {
+			cerr = cerr.WithDetail(detail)
+		}
 	}
 	return cerr
 }
 
+// maxBadRequestBytes is the most a google.rpc.BadRequest detail takes, so that
+// a request with a great many violations is not answered with an error as
+// large. aip-rs holds its BadRequest to the same budget.
+const maxBadRequestBytes = 4096
+
 // badRequest returns violations as AIP-193's google.rpc.BadRequest, the
 // standard detail for the fields a request got wrong: a field violation per
-// violation, with its field path and its message.
+// violation, with its field path and its message, in order, until the next
+// would take the detail past [maxBadRequestBytes]. What does not fit is left
+// out of it, not out of the buf.validate.Violations detail, which has every
+// violation.
 func badRequest(violations []*protovalidate.Violation) *errdetails.BadRequest {
 	request := &errdetails.BadRequest{}
 	for _, violation := range violations {
@@ -158,6 +168,10 @@ func badRequest(violations []*protovalidate.Violation) *errdetails.BadRequest {
 			Field:       protovalidate.FieldPathString(violation.Proto.GetField()),
 			Description: violation.Proto.GetMessage(),
 		})
+		if proto.Size(request) > maxBadRequestBytes {
+			request.FieldViolations = request.FieldViolations[:len(request.FieldViolations)-1]
+			break
+		}
 	}
 	return request
 }
