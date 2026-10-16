@@ -7,7 +7,8 @@
 //
 // The AIPs implemented here:
 //
-//   - AIP-122 resource names — [ResourcePattern], [ResourceName]
+//   - AIP-122 resource names — [ResourcePattern] (relative and fully-qualified
+//     scans, [ParseError] for what was wrong), [ResourceName]
 //   - AIP-133, AIP-134, AIP-233, AIP-234 request shapes — [ResourceWrites]
 //   - AIP-134 field masks — [ImpliedFieldMask] for an update's omitted mask,
 //     [ClearFieldMask] to remove the paths of a kind, such as OUTPUT_ONLY, from

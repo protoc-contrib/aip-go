@@ -14,7 +14,105 @@ const ResourceWildcard = "-"
 
 // ErrInvalidResourceName is returned when a string does not match the pattern
 // it was scanned against. Map it to InvalidArgument at the RPC boundary.
+//
+// The error a scan returns is a [*ParseError], which says what was wrong and
+// is this error too: errors.Is(err, ErrInvalidResourceName) holds for it.
 var ErrInvalidResourceName = errors.New("invalid resource name")
+
+// ParseErrorKind says what was wrong with a resource name.
+type ParseErrorKind int
+
+const (
+	// ParseSegmentCount is a name with the wrong number of "/"-separated
+	// segments: [ParseError.WantSegments] against [ParseError.GotSegments].
+	ParseSegmentCount ParseErrorKind = iota + 1
+	// ParseLiteral is a literal segment that does not match: segment
+	// [ParseError.Index] is [ParseError.Got], and the pattern requires
+	// [ParseError.Want].
+	ParseLiteral
+	// ParseEmptyValue is a variable segment with no value: segment
+	// [ParseError.Index], the variable [ParseError.Field].
+	ParseEmptyValue
+	// ParsePrefix is a fully-qualified name that does not start with
+	// "//{domain}/", which is [ParseError.Want]. Only [ResourcePattern.ScanFull]
+	// produces it; the relative form has no prefix to get wrong.
+	ParsePrefix
+	// ParseInvalidValue is a variable segment whose value is not valid for the
+	// type that segment is declared to hold: the variable [ParseError.Field],
+	// and why in [ParseError.Reason]. The caller raises it with
+	// [ResourcePattern.InvalidValue]; the scan has no opinion about anything
+	// beyond the separator.
+	ParseInvalidValue
+	// ParseInvalidID is a request field holding a bare id, not a name -- a
+	// create's `<resource>_id` -- whose value is not one: [ParseError.Field] is
+	// the request field, [ParseError.Name] the id, and why in
+	// [ParseError.Reason]. The caller raises it with [ResourcePattern.InvalidID].
+	ParseInvalidID
+)
+
+// ParseError reports why a string does not parse as a resource name of a
+// pattern: what every [ResourcePattern.Scan] and [ResourcePattern.ScanFull]
+// failure is, so a caller can tell a name with the wrong shape from one with a
+// bad literal without reading the message.
+//
+//	var perr *aip.ParseError
+//	if errors.As(err, &perr) && perr.Kind == aip.ParseSegmentCount { ... }
+//
+// It is also [ErrInvalidResourceName]. Map it to InvalidArgument at the RPC
+// boundary. Which of the fields below carry a value depends on Kind.
+type ParseError struct {
+	// Pattern is the pattern the name was parsed against.
+	Pattern string
+	// Name is the name that failed to parse, or for [ParseInvalidID] the id.
+	Name string
+	// Kind is what was wrong with it.
+	Kind ParseErrorKind
+	// Index is the segment's position in the pattern: [ParseLiteral] and
+	// [ParseEmptyValue].
+	Index int
+	// Want is the literal the pattern requires for [ParseLiteral], and the
+	// prefix a fully-qualified name must start with for [ParsePrefix].
+	Want string
+	// Got is what a [ParseLiteral] segment has instead.
+	Got string
+	// WantSegments and GotSegments are the number of segments the pattern has
+	// and the name has: [ParseSegmentCount].
+	WantSegments, GotSegments int
+	// Field is the variable's name for [ParseEmptyValue] and
+	// [ParseInvalidValue], and the request field for [ParseInvalidID].
+	Field string
+	// Reason is what the conversion said was wrong, for [ParseInvalidValue]
+	// and [ParseInvalidID].
+	Reason string
+}
+
+// Error describes the failure; for every kind but [ParseInvalidID] it starts
+// with the text of [ErrInvalidResourceName].
+func (e *ParseError) Error() string {
+	// A bare id is not a name, so it is not parsed against the pattern.
+	if e.Kind == ParseInvalidID {
+		return fmt.Sprintf("parse %s %q: %s", e.Field, e.Name, e.Reason)
+	}
+	head := fmt.Sprintf("%v: parse %q against %q: ", ErrInvalidResourceName, e.Name, e.Pattern)
+	switch e.Kind {
+	case ParseSegmentCount:
+		return head + fmt.Sprintf("bad number of segments, want %d, got %d", e.WantSegments, e.GotSegments)
+	case ParseLiteral:
+		return head + fmt.Sprintf("bad segment %d, want %q, got %q", e.Index, e.Want, e.Got)
+	case ParseEmptyValue:
+		return head + fmt.Sprintf("empty value for segment %d (%s)", e.Index, e.Field)
+	case ParsePrefix:
+		return head + fmt.Sprintf("bad prefix, want %q", e.Want)
+	case ParseInvalidValue:
+		return head + fmt.Sprintf("invalid value for segment (%s): %s", e.Field, e.Reason)
+	default:
+		return head + "unknown failure"
+	}
+}
+
+// Is reports a [ParseError] as [ErrInvalidResourceName], so callers that
+// matched the sentinel keep working.
+func (e *ParseError) Is(target error) bool { return target == ErrInvalidResourceName }
 
 // ResourcePattern is a compiled AIP-122 resource name pattern, such as
 // "publishers/{publisher}/books/{book}".
@@ -189,10 +287,10 @@ func (p *ResourcePattern) Scan(name string, into ...*string) error {
 	// Count first so a length mismatch reports what the caller actually sent
 	// rather than failing on whichever segment happens to differ.
 	if got := strings.Count(name, "/") + 1; got != len(p.segments) {
-		return fmt.Errorf(
-			"%w: parse %q against %q: bad number of segments, want %d, got %d",
-			ErrInvalidResourceName, name, p.pattern, len(p.segments), got,
-		)
+		return &ParseError{
+			Pattern: p.pattern, Name: name, Kind: ParseSegmentCount,
+			WantSegments: len(p.segments), GotSegments: got,
+		}
 	}
 	// Two walks rather than one: the first rejects, the second assigns. A
 	// single walk would have to either stage the values (an allocation on
@@ -207,18 +305,18 @@ func (p *ResourcePattern) Scan(name string, into ...*string) error {
 		}
 		if !segment.variable {
 			if part != segment.name {
-				return fmt.Errorf(
-					"%w: parse %q against %q: bad segment %d, want %q, got %q",
-					ErrInvalidResourceName, name, p.pattern, i, segment.name, part,
-				)
+				return &ParseError{
+					Pattern: p.pattern, Name: name, Kind: ParseLiteral,
+					Index: i, Want: segment.name, Got: part,
+				}
 			}
 			continue
 		}
 		if part == "" {
-			return fmt.Errorf(
-				"%w: parse %q against %q: empty value for segment %d (%s)",
-				ErrInvalidResourceName, name, p.pattern, i, segment.name,
-			)
+			return &ParseError{
+				Pattern: p.pattern, Name: name, Kind: ParseEmptyValue,
+				Index: i, Field: segment.name,
+			}
 		}
 	}
 	rest = name
@@ -235,6 +333,49 @@ func (p *ResourcePattern) Scan(name string, into ...*string) error {
 		}
 	}
 	return nil
+}
+
+// ScanFull matches the fully-qualified form of name -- "//{domain}/" followed
+// by the pattern -- and assigns each variable segment to the corresponding
+// pointer, in pattern order, as [ResourcePattern.Scan] does.
+//
+// domain is the service name, which by AIP-123 is the part of a resource type
+// before the "/": "example.com" for "example.com/Book". The relative form is
+// the one that travels in a name field; this is for the fully-qualified form
+// that appears in cross-service references.
+//
+// A name without the prefix is a [ParsePrefix] error, reported against the
+// name as given; a failure past it reports the relative part it scanned. Like
+// Scan, it allocates nothing when the name matches.
+func (p *ResourcePattern) ScanFull(name, domain string, into ...*string) error {
+	rest, ok := strings.CutPrefix(name, "//")
+	if ok {
+		rest, ok = strings.CutPrefix(rest, domain)
+	}
+	if ok {
+		rest, ok = strings.CutPrefix(rest, "/")
+	}
+	if !ok {
+		return &ParseError{Pattern: p.pattern, Name: name, Kind: ParsePrefix, Want: "//" + domain + "/"}
+	}
+	return p.Scan(rest, into...)
+}
+
+// InvalidValue returns the [ParseInvalidValue] error for variable of name,
+// whose value a caller's conversion refused for reason: a segment that has to
+// be a number and is not. The scan itself has no opinion about a value beyond
+// the separator.
+func (p *ResourcePattern) InvalidValue(name, variable string, reason error) *ParseError {
+	return &ParseError{Pattern: p.pattern, Name: name, Kind: ParseInvalidValue, Field: variable, Reason: reason.Error()}
+}
+
+// InvalidID returns the [ParseInvalidID] error for the request field field,
+// which holds the bare id id of this pattern's resource -- a create's
+// `<resource>_id` (AIP-133) -- and should not have: `parse book_id "abc":
+// reason`. It names the field rather than a segment, since the field is what
+// the caller sent.
+func (p *ResourcePattern) InvalidID(field, id string, reason error) *ParseError {
+	return &ParseError{Pattern: p.pattern, Name: id, Kind: ParseInvalidID, Field: field, Reason: reason.Error()}
 }
 
 // Format renders the pattern with values substituted for its variable
