@@ -30,6 +30,9 @@ concept, not by a package path.
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 | [133](https://google.aip.dev/133), [134](https://google.aip.dev/134), [233](https://google.aip.dev/233), [234](https://google.aip.dev/234) | standard-method request shapes | ✅ `ResourceWrites` |
 | — | Connect interceptor applying all of the above | ✅ `NewFieldBehaviorInterceptor` |
+| [193](https://google.aip.dev/193) | error details: `BadRequest`, `DebugInfo`, a batch entry's `google.rpc.Status` | ✅ `NewBadRequest`, `NewDebugInfo`, `NewStatus`, `NewEntryStatus` |
+| [193](https://google.aip.dev/193) | log the failure, answer without its debug information | ✅ `NewErrorInterceptor` |
+| [133](https://google.aip.dev/133) | the server builds a create's name, before the handler | ✅ `NewPrepareInterceptor` |
 
 ## Ordering, pagination and filtering
 
@@ -191,6 +194,42 @@ and has every one. For a different policy — other kinds, IMMUTABLE cleared on 
 another id scheme — build an interceptor from `ClearFields`, `ValidateFields`,
 `ImpliedFieldMask`, `ClearFieldMask` and `ResourceWrites`; `ResourceCreate.SetID` sets an id of
 your own scheme.
+
+## Errors (AIP-193)
+
+A handler answers a failure with a `*connect.Error` and the details AIP-193
+names, built here: `NewBadRequest` for the request field a `*FieldError` names
+(its description is fixed, since an error's own text can carry the value),
+`NewDebugInfo` for the cause and the stack, and `NameRequestError` to name the
+`name` or `parent` of a request whose resource name failed to yield an id. A
+service adds the details that are its own — an `ErrorInfo` with its error
+domain, a `ResourceInfo` — with `NewErrorDetail`, which packs any message.
+
+`NewErrorInterceptor` is the single place a failure is logged. It logs each
+failed RPC at the level `ErrorLogLevel` gives its code, with the cause and the
+`DebugInfo`, and answers the client without the `DebugInfo`, which is for the
+log (AIP-193). It also answers a request body that does not decode with a fixed
+message, since the parser's text can carry the value. A batch answers a failed
+entry with a `google.rpc.Status` (`NewStatus`; `NewEntryStatus` names its
+`BadRequest` fields under `requests[i]`), not an error, so the interceptor wraps
+the response stream too: it logs the entries that failed on the server's side
+and takes the `DebugInfo` out of every failed entry.
+
+```go
+server := connect.NewServer(
+	aip.NewErrorInterceptor(
+		aip.WithErrorLogger(loggerOf),         // default: slog.Default
+		aip.WithErrorRequestID(requestIDOf),   // sent as a google.rpc.RequestInfo
+	),
+	fields,
+	aip.NewPrepareInterceptor(nil),
+)
+```
+
+`NewPrepareInterceptor` calls `Prepare` on each request that implements
+`RequestPreparer`, where AIP-133 has the server build a create's name from its
+`parent` and id. A failed `Prepare` is `InvalidArgument`, with the field it
+names; pass a function to answer it with details of your own.
 
 ## Resource names
 

@@ -16,7 +16,10 @@
 //   - AIP-193 errors — [FieldError] names the request field a value is invalid
 //     in, as a [protopath.Path] that [FieldPath] resolves against the message's
 //     descriptor; its [FieldError.Field] is the name google.rpc.BadRequest
-//     takes
+//     takes; [NewBadRequest], [NewDebugInfo], [NewStatus] and
+//     [NewEntryStatus] build the details and a batch entry's status, and
+//     [NewErrorInterceptor] logs a failure and answers without its debug
+//     information
 //   - AIP-203 field behavior — [ClearFields] to unset the fields of a
 //     [FieldBehaviorKind], [ValidateFields] to report the ones left unset, as
 //     a [*FieldBehaviorError] holding their paths; [FieldBehaviorsOf] reads a
