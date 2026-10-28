@@ -24,7 +24,7 @@ import (
 //   - Each message the server receives has its OUTPUT_ONLY fields cleared;
 //     what AIP leaves to the server is filled in on each resource it writes
 //     ([ResourceWrites]) — a create's omitted `<resource>_id` becomes a UUIDv7
-//     (AIP-133), an update's omitted mask becomes [ImpliedFieldMask]
+//     (AIP-133, or what [WithIDGenerator] makes), an update's omitted mask becomes [ImpliedFieldMask]
 //     (AIP-134), and the OUTPUT_ONLY paths of an update's explicit mask are
 //     removed with [ClearFieldMask] (AIP-203); then it is validated with
 //     protovalidate, and every REQUIRED field each resource leaves unset —
@@ -44,16 +44,35 @@ import (
 // [ClearFieldMask] and [ResourceWrites].
 //
 // It fails only if protovalidate's validator cannot be built.
-func NewFieldBehaviorInterceptor() (connect.ServerInterceptor, error) {
+func NewFieldBehaviorInterceptor(options ...FieldBehaviorOption) (connect.ServerInterceptor, error) {
 	validator, err := protovalidate.New()
 	if err != nil {
 		return nil, err
 	}
+	config := fieldBehaviorConfig{newID: func() string { return uuid.NewV7().String() }}
+	for _, option := range options {
+		option(&config)
+	}
 	return func(next connect.ServerFunc) connect.ServerFunc {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
-			return next(ctx, spec, &fieldBehaviorStream{ServerStream: stream, validator: validator})
+			return next(ctx, spec, &fieldBehaviorStream{ServerStream: stream, validator: validator, newID: config.newID})
 		}
 	}, nil
+}
+
+// FieldBehaviorOption configures [NewFieldBehaviorInterceptor].
+type FieldBehaviorOption func(*fieldBehaviorConfig)
+
+type fieldBehaviorConfig struct {
+	newID func() string
+}
+
+// WithIDGenerator sets how [NewFieldBehaviorInterceptor] makes the
+// `<resource>_id` of a create that omits one (AIP-133): the id scheme is the
+// service's. The default is a UUIDv7, so server-assigned ids sort by creation
+// time.
+func WithIDGenerator(generate func() string) FieldBehaviorOption {
+	return func(c *fieldBehaviorConfig) { c.newID = generate }
 }
 
 // fieldBehaviorStream applies field behavior to the messages of one RPC, as
@@ -61,6 +80,7 @@ func NewFieldBehaviorInterceptor() (connect.ServerInterceptor, error) {
 type fieldBehaviorStream struct {
 	connect.ServerStream
 	validator protovalidate.Validator
+	newID     func() string
 }
 
 func (s *fieldBehaviorStream) Receive(message any) error {
@@ -82,7 +102,7 @@ func (s *fieldBehaviorStream) Receive(message any) error {
 		switch {
 		case write.Create != nil:
 			if write.Create.ID() == "" {
-				write.Create.SetID(uuid.NewV7().String())
+				write.Create.SetID(s.newID())
 			}
 		case write.Update != nil:
 			if mask := write.Update.Mask(); len(mask.GetPaths()) == 0 {

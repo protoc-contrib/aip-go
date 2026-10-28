@@ -401,3 +401,37 @@ var _ = Describe("FieldBehaviorInterceptor", func() {
 		Expect(violations(err)).To(Equal([]string{"book.title required"}))
 	})
 })
+
+var _ = Describe("WithIDGenerator", func() {
+	It("makes the id of a create that omits one, in the service's own scheme", func(ctx SpecContext) {
+		interceptor, err := aip.NewFieldBehaviorInterceptor(aip.WithIDGenerator(func() string { return "slug-1" }))
+		Expect(err).NotTo(HaveOccurred())
+
+		service := &bookService{}
+		mux := http.NewServeMux()
+		srv := connect.NewServer(interceptor)
+		testpbconnect.RegisterBookServiceHandler(srv, service)
+		connecthttp.Mount(mux, srv)
+		server := httptest.NewUnstartedServer(mux)
+		server.EnableHTTP2 = true
+		server.StartTLS()
+		DeferCleanup(server.Close)
+		client := testpbconnect.NewBookServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL)))
+
+		_, err = client.CreateBook(ctx, &testpb.CreateBookRequest{
+			Parent: "shelves/a",
+			Book:   &testpb.Book{Title: "Dune", Author: "Herbert"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(service.last().(*testpb.CreateBookRequest).GetBookId()).To(Equal("slug-1"))
+
+		// An id the client sent is kept.
+		_, err = client.CreateBook(ctx, &testpb.CreateBookRequest{
+			Parent: "shelves/a",
+			BookId: "dune",
+			Book:   &testpb.Book{Title: "Dune", Author: "Herbert"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(service.last().(*testpb.CreateBookRequest).GetBookId()).To(Equal("dune"))
+	})
+})
