@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // NewErrorDetail packs message as an error detail, or returns nil, which
@@ -22,6 +24,26 @@ func NewErrorDetail(message proto.Message) *connect.ErrorDetail {
 		return nil
 	}
 	return detail
+}
+
+// NewErrorInfo returns the google.rpc.ErrorInfo detail of an error (AIP-193):
+// why it happened, as reason, in domain, the name of the service that
+// generated it. A reason is unique within its domain, at most 63 characters,
+// and matches `[A-Z][A-Z0-9_]+[A-Z0-9]`, such as `ITEM_NOT_FOUND`.
+func NewErrorInfo(domain, reason string) *connect.ErrorDetail {
+	return NewErrorDetail(&errdetails.ErrorInfo{Reason: reason, Domain: domain})
+}
+
+// NewResourceInfo returns the google.rpc.ResourceInfo detail of an error about
+// the resource named name: its type and its name.
+func NewResourceInfo(name ResourceName) *connect.ErrorDetail {
+	return NewErrorDetail(&errdetails.ResourceInfo{ResourceType: name.Type(), ResourceName: name.String()})
+}
+
+// NewRetryInfo returns the google.rpc.RetryInfo detail of an error the client
+// may retry: how long to wait before it does (AIP-194).
+func NewRetryInfo(delay time.Duration) *connect.ErrorDetail {
+	return NewErrorDetail(&errdetails.RetryInfo{RetryDelay: durationpb.New(delay)})
 }
 
 // NewBadRequest returns the google.rpc.BadRequest detail of an error about the

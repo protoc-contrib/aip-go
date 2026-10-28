@@ -30,7 +30,8 @@ concept, not by a package path.
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 | [133](https://google.aip.dev/133), [134](https://google.aip.dev/134), [233](https://google.aip.dev/233), [234](https://google.aip.dev/234) | standard-method request shapes | ✅ `ResourceWrites` |
 | — | Connect interceptor applying all of the above | ✅ `NewFieldBehaviorInterceptor` |
-| [193](https://google.aip.dev/193) | error details: `BadRequest`, `DebugInfo`, a batch entry's `google.rpc.Status` | ✅ `NewBadRequest`, `NewDebugInfo`, `NewStatus`, `NewEntryStatus` |
+| [193](https://google.aip.dev/193) | error details: `ErrorInfo`, `ResourceInfo`, `BadRequest`, `DebugInfo`, a batch entry's `google.rpc.Status` | ✅ `NewErrorInfo`, `NewResourceInfo`, `NewBadRequest`, `NewDebugInfo`, `NewStatus`, `NewEntryStatus` |
+| [194](https://google.aip.dev/194) | `RetryInfo` of an error a client may retry | ✅ `NewRetryInfo` |
 | [193](https://google.aip.dev/193) | log the failure, answer without its debug information | ✅ `NewErrorInterceptor` |
 | [133](https://google.aip.dev/133) | the server builds a create's name, before the handler | ✅ `NewPrepareInterceptor` |
 
@@ -198,12 +199,14 @@ your own scheme.
 ## Errors (AIP-193)
 
 A handler answers a failure with a `*connect.Error` and the details AIP-193
-names, built here: `NewBadRequest` for the request field a `*FieldError` names
+names, built here: `NewErrorInfo` (the reason and the domain, the service's
+name), `NewResourceInfo` for the resource an error is about, `NewRetryInfo` for
+how long to wait before a retry, `NewBadRequest` for the request field a `*FieldError` names
 (its description is fixed, since an error's own text can carry the value),
 `NewDebugInfo` for the cause and the stack, and `NameRequestError` to name the
-`name` or `parent` of a request whose resource name failed to yield an id. A
-service adds the details that are its own — an `ErrorInfo` with its error
-domain, a `ResourceInfo` — with `NewErrorDetail`, which packs any message.
+`name` or `parent` of a request whose resource name failed to yield an id.
+`NewErrorDetail` packs any other message. Which details an error carries, the
+reasons, and the domain are the service's own.
 
 `NewErrorInterceptor` is the single place a failure is logged. It logs each
 failed RPC at the level `ErrorLogLevel` gives its code, with the cause and the
@@ -218,13 +221,22 @@ and takes the `DebugInfo` out of every failed entry.
 ```go
 server := connect.NewServer(
 	aip.NewErrorInterceptor(
-		aip.WithErrorLogger(loggerOf),         // default: slog.Default
-		aip.WithErrorRequestID(requestIDOf),   // sent as a google.rpc.RequestInfo
+		aip.WithErrorLogger(loggerOf),                   // default: slog.Default
+		aip.WithErrorRequestID(requestIDOf),             // sent as a google.rpc.RequestInfo
+		aip.WithDefaultErrorInfo("books.example.com"),   // an ErrorInfo for any error without one
 	),
 	fields,
 	aip.NewPrepareInterceptor(nil),
 )
 ```
+
+AIP-193 asks for an `ErrorInfo` on every error. A service attaches its own,
+with a reason more specific than the code, where it builds its errors;
+`WithDefaultErrorInfo(domain)` covers the ones it does not build — the
+request's validation, a body that does not decode, a failed batch entry — by
+giving an error that has none an `ErrorInfo` in that domain with its code as
+the reason (`NOT_FOUND`). It is off by default, and leaves an `ErrorInfo` an
+error has as it is.
 
 `NewPrepareInterceptor` calls `Prepare` on each request that implements
 `RequestPreparer`, where AIP-133 has the server build a create's name from its

@@ -162,6 +162,73 @@ var _ = Describe("ErrorInterceptor", func() {
 	})
 })
 
+var _ = Describe("ErrorInterceptor default ErrorInfo", func() {
+	var (
+		service *failingService
+		client  testpbconnect.BookServiceClient
+	)
+
+	start := func(options ...aip.ErrorInterceptorOption) {
+		service = &failingService{}
+		mux := http.NewServeMux()
+		srv := connect.NewServer(aip.NewErrorInterceptor(options...))
+		testpbconnect.RegisterBookServiceHandler(srv, service)
+		connecthttp.Mount(mux, srv)
+		server := httptest.NewUnstartedServer(mux)
+		server.EnableHTTP2 = true
+		server.StartTLS()
+		DeferCleanup(server.Close)
+		client = testpbconnect.NewBookServiceClient(connect.NewClient(connecthttp.NewTransport(server.Client(), server.URL)))
+	}
+
+	// errorInfos returns the ErrorInfo details err carries.
+	errorInfos := func(err error) []*errdetails.ErrorInfo {
+		var cerr *connect.Error
+		Expect(errors.As(err, &cerr)).To(BeTrue(), "%v is not a *connect.Error", err)
+		var found []*errdetails.ErrorInfo
+		for _, detail := range cerr.Details() {
+			if info, ok := unpack(detail).(*errdetails.ErrorInfo); ok {
+				found = append(found, info)
+			}
+		}
+		return found
+	}
+
+	It("gives an error that has none an ErrorInfo, in the domain, with its code as the reason", func(ctx SpecContext) {
+		start(aip.WithDefaultErrorInfo("books.example.com"))
+		service.err = connect.NewError(connect.CodeNotFound, "The requested book was not found")
+
+		_, err := client.GetBook(ctx, &testpb.GetBookRequest{Name: "books/dune"})
+
+		infos := errorInfos(err)
+		Expect(infos).To(HaveLen(1))
+		Expect(infos[0].GetReason()).To(Equal("NOT_FOUND"))
+		Expect(infos[0].GetDomain()).To(Equal("books.example.com"))
+	})
+
+	It("leaves the ErrorInfo an error has as it is", func(ctx SpecContext) {
+		start(aip.WithDefaultErrorInfo("books.example.com"))
+		service.err = connect.NewError(connect.CodeNotFound, "The requested book was not found").
+			WithDetail(aip.NewErrorInfo("shelves.example.com", "BOOK_NOT_FOUND"))
+
+		_, err := client.GetBook(ctx, &testpb.GetBookRequest{Name: "books/dune"})
+
+		infos := errorInfos(err)
+		Expect(infos).To(HaveLen(1), "each detail type is sent at most once")
+		Expect(infos[0].GetReason()).To(Equal("BOOK_NOT_FOUND"))
+		Expect(infos[0].GetDomain()).To(Equal("shelves.example.com"))
+	})
+
+	It("adds none without the option", func(ctx SpecContext) {
+		start()
+		service.err = connect.NewError(connect.CodeNotFound, "The requested book was not found")
+
+		_, err := client.GetBook(ctx, &testpb.GetBookRequest{Name: "books/dune"})
+
+		Expect(errorInfos(err)).To(BeEmpty())
+	})
+})
+
 var _ = Describe("ErrorLogLevel", func() {
 	DescribeTable("maps a code to the level its failure is logged at",
 		func(code connect.Code, level slog.Level) {

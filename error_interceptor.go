@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
@@ -31,9 +32,32 @@ func WithErrorRequestID(requestID func(context.Context) string) ErrorInterceptor
 	return func(i *errorInterceptor) { i.requestID = requestID }
 }
 
+// WithDefaultErrorInfo makes [NewErrorInterceptor] give an error that has no
+// google.rpc.ErrorInfo one, in domain, with its code as the reason:
+// `NOT_FOUND`, `INVALID_ARGUMENT`. AIP-193 asks for an ErrorInfo on every
+// error. A service attaches its own, with a reason more specific than the code,
+// where it builds its errors; this covers the ones it does not build, such as
+// the request's validation, a body that does not decode, and a failed entry of
+// a batch response. An error that has an ErrorInfo is left as it is, and the
+// default is off without this option. It applies to a [*connect.Error]: any
+// other error is sent by connect-go as Unknown, as it is.
+func WithDefaultErrorInfo(domain string) ErrorInterceptorOption {
+	return func(i *errorInterceptor) { i.domain = domain }
+}
+
 type errorInterceptor struct {
 	logger    func(context.Context) *slog.Logger
 	requestID func(context.Context) string
+	domain    string
+}
+
+// defaultErrorInfo returns the ErrorInfo an error of code gets when it has none,
+// or nil without a domain.
+func (i *errorInterceptor) defaultErrorInfo(code connect.Code) *errdetails.ErrorInfo {
+	if i.domain == "" {
+		return nil
+	}
+	return &errdetails.ErrorInfo{Reason: strings.ToUpper(code.String()), Domain: i.domain}
 }
 
 func (i *errorInterceptor) log(ctx context.Context) *slog.Logger {
@@ -122,6 +146,13 @@ func NewErrorInterceptor(options ...ErrorInterceptorOption) connect.ServerInterc
 			// id is for the client, who may not see the response headers.
 			if cerr, ok := errors.AsType[*connect.Error](err); ok {
 				perr := connect.NewError(cerr.Code(), cerr.Message()).WithCause(errors.Unwrap(cerr))
+				hasInfo := false
+				for _, detail := range cerr.Details() {
+					hasInfo = hasInfo || detail.Type == "google.rpc.ErrorInfo"
+				}
+				if info := interceptor.defaultErrorInfo(cerr.Code()); info != nil && !hasInfo {
+					perr = perr.WithDetail(NewErrorDetail(info))
+				}
 				for _, detail := range cerr.Details() {
 					if detail.Type != "google.rpc.DebugInfo" {
 						perr = perr.WithDetail(detail)
@@ -189,13 +220,20 @@ func (s errorStream) Send(msg any) error {
 
 			var details []*anypb.Any
 			var debug *errdetails.DebugInfo
+			hasInfo := false
 			for _, detail := range entry.GetDetails() {
 				info := &errdetails.DebugInfo{}
 				if detail.MessageIs(info) && detail.UnmarshalTo(info) == nil {
 					debug = info
 					continue
 				}
+				hasInfo = hasInfo || detail.MessageIs(&errdetails.ErrorInfo{})
 				details = append(details, detail)
+			}
+			if info := s.interceptor.defaultErrorInfo(connect.Code(entry.GetCode())); info != nil && !hasInfo {
+				if packed, err := anypb.New(info); err == nil {
+					details = append([]*anypb.Any{packed}, details...)
+				}
 			}
 			entry.Details = details
 

@@ -3,6 +3,7 @@ package aip_test
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
@@ -159,5 +160,43 @@ var _ = Describe("NewEntryStatus", func() {
 		resource := &errdetails.ResourceInfo{}
 		Expect(result.GetDetails()[0].UnmarshalTo(resource)).To(Succeed())
 		Expect(resource.GetResourceName()).To(Equal("books/dune"))
+	})
+})
+
+// namedResource is a resource name with the type and the text a spec gives it.
+type namedResource struct {
+	aip.ResourceName
+	resourceType string
+	name         string
+}
+
+func (n namedResource) Type() string   { return n.resourceType }
+func (n namedResource) String() string { return n.name }
+
+var _ = Describe("NewErrorInfo", func() {
+	It("carries the reason and the domain", func() {
+		info := unpack(aip.NewErrorInfo("books.example.com", "BOOK_NOT_FOUND")).(*errdetails.ErrorInfo)
+
+		Expect(info.GetReason()).To(Equal("BOOK_NOT_FOUND"))
+		Expect(info.GetDomain()).To(Equal("books.example.com"))
+	})
+})
+
+var _ = Describe("NewResourceInfo", func() {
+	It("carries the type and the name of the resource", func() {
+		name := namedResource{resourceType: "books.example.com/Book", name: "shelves/a/books/dune"}
+
+		info := unpack(aip.NewResourceInfo(name)).(*errdetails.ResourceInfo)
+
+		Expect(info.GetResourceType()).To(Equal("books.example.com/Book"))
+		Expect(info.GetResourceName()).To(Equal("shelves/a/books/dune"))
+	})
+})
+
+var _ = Describe("NewRetryInfo", func() {
+	It("carries how long to wait before a retry", func() {
+		info := unpack(aip.NewRetryInfo(1500 * time.Millisecond)).(*errdetails.RetryInfo)
+
+		Expect(info.GetRetryDelay().AsDuration()).To(Equal(1500 * time.Millisecond))
 	})
 })

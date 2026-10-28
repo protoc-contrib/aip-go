@@ -181,6 +181,50 @@ var _ = Describe("errorStream", func() {
 			Expect(notFound.GetDetails()).To(BeEmpty())
 		})
 
+		Describe("with a default ErrorInfo", func() {
+			// reasons returns the ErrorInfo reason and domain of each entry's details.
+			infoOf := func(entry *status.Status) []string {
+				var found []string
+				for _, detail := range entry.GetDetails() {
+					info := &errdetails.ErrorInfo{}
+					if detail.MessageIs(info) && detail.UnmarshalTo(info) == nil {
+						found = append(found, info.GetReason()+"@"+info.GetDomain())
+					}
+				}
+				return found
+			}
+
+			BeforeEach(func() {
+				interceptor.domain = "books.example.com"
+			})
+
+			It("gives a failed entry that has none an ErrorInfo for its code", func() {
+				entry := failedEntry(connect.CodeNotFound, errors.New("no rows"))
+
+				Expect(stream.Send(batchResponse(entry))).To(Succeed())
+
+				Expect(infoOf(entry)).To(ConsistOf("NOT_FOUND@books.example.com"))
+			})
+
+			It("leaves the ErrorInfo a failed entry has as it is", func() {
+				entry := NewStatus(connect.NewError(connect.CodeNotFound, "entry failed").
+					WithDetail(NewErrorInfo("shelves.example.com", "BOOK_NOT_FOUND")).
+					WithDetail(NewDebugInfo(errors.New("no rows"))))
+
+				Expect(stream.Send(batchResponse(entry))).To(Succeed())
+
+				Expect(infoOf(entry)).To(ConsistOf("BOOK_NOT_FOUND@shelves.example.com"))
+			})
+		})
+
+		It("adds no ErrorInfo to a failed entry without the option", func() {
+			entry := failedEntry(connect.CodeNotFound, errors.New("no rows"))
+
+			Expect(stream.Send(batchResponse(entry))).To(Succeed())
+
+			Expect(entry.GetDetails()).To(BeEmpty())
+		})
+
 		It("sends a message that is not a batch response as it is", func() {
 			message := &errdetails.RetryInfo{}
 
