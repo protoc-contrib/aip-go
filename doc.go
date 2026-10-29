@@ -17,10 +17,10 @@
 //     in, as a [protopath.Path] that [FieldPath] resolves against the message's
 //     descriptor; its [FieldError.Field] is the name google.rpc.BadRequest
 //     takes; [NewErrorInfo], [NewResourceInfo], [NewRetryInfo],
-//     [NewBadRequest] and [NewDebugInfo] build the details, [NewStatus] and
-//     [NewEntryStatus] a batch entry's status, and [NewErrorInterceptor] logs
-//     a failure and answers without its debug information, with an
-//     ErrorInfo on every error when [WithDefaultErrorInfo] is set
+//     [NewBadRequest] and [NewDebugInfo] build the details, [NewStatus] a
+//     batch entry's status, and [NewErrorInterceptor] logs a failure and
+//     answers without its debug information, with an ErrorInfo on every error
+//     when [WithDefaultErrorInfo] is set
 //   - AIP-203 field behavior — [ClearFields] to unset the fields of a
 //     [FieldBehaviorKind], [ValidateFields] to report the ones left unset, as
 //     a [*FieldBehaviorError] holding their paths; [FieldBehaviorsOf] reads a

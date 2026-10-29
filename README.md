@@ -30,7 +30,7 @@ concept, not by a package path.
 | [160](https://google.aip.dev/160) | `filter` | not here — CEL, via the generator |
 | [133](https://google.aip.dev/133), [134](https://google.aip.dev/134), [233](https://google.aip.dev/233), [234](https://google.aip.dev/234) | standard-method request shapes | ✅ `ResourceWrites` |
 | — | Connect interceptor applying all of the above | ✅ `NewFieldBehaviorInterceptor` |
-| [193](https://google.aip.dev/193) | error details: `ErrorInfo`, `ResourceInfo`, `BadRequest`, `DebugInfo`, a batch entry's `google.rpc.Status` | ✅ `NewErrorInfo`, `NewResourceInfo`, `NewBadRequest`, `NewDebugInfo`, `NewStatus`, `NewEntryStatus` |
+| [193](https://google.aip.dev/193) | error details: `ErrorInfo`, `ResourceInfo`, `BadRequest`, `DebugInfo`, a batch entry's `google.rpc.Status` | ✅ `NewErrorInfo`, `NewResourceInfo`, `NewBadRequest`, `NewDebugInfo`, `NewStatus` |
 | [194](https://google.aip.dev/194) | `RetryInfo` of an error a client may retry | ✅ `NewRetryInfo` |
 | [193](https://google.aip.dev/193) | log the failure, answer without its debug information | ✅ `NewErrorInterceptor` |
 | [133](https://google.aip.dev/133) | the server builds a create's name, before the handler | ✅ `NewPrepareInterceptor` |
@@ -212,8 +212,7 @@ failed RPC at the level `ErrorLogLevel` gives its code, with the cause and the
 `DebugInfo`, and answers the client without the `DebugInfo`, which is for the
 log (AIP-193). It also answers a request body that does not decode with a fixed
 message, since the parser's text can carry the value. A batch answers a failed
-entry with a `google.rpc.Status` (`NewStatus`; `NewEntryStatus` names its
-`BadRequest` fields under `requests[i]`), not an error, so the interceptor wraps
+entry with a `google.rpc.Status` (`NewStatus`), not an error, so the interceptor wraps
 the response stream too: it logs the entries that failed on the server's side
 and takes the `DebugInfo` out of every failed entry.
 
