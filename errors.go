@@ -116,25 +116,3 @@ func NewStatus(err error) *status.Status {
 	}
 	return result
 }
-
-// NewEntryStatus is [NewStatus] for the entry at index of a batch request's
-// `requests`, with the fields of its google.rpc.BadRequest named under that
-// entry, as `requests[1].name`: a field path is the request's, and the batch is
-// the request a client sent.
-func NewEntryStatus(err error, index int) *status.Status {
-	result := NewStatus(err)
-	if result == nil {
-		return nil
-	}
-	for _, detail := range result.Details {
-		request := &errdetails.BadRequest{}
-		if !detail.MessageIs(request) || detail.UnmarshalTo(request) != nil {
-			continue
-		}
-		for _, violation := range request.FieldViolations {
-			violation.Field = fmt.Sprintf("requests[%d].%s", index, violation.Field)
-		}
-		_ = detail.MarshalFrom(request)
-	}
-	return result
-}

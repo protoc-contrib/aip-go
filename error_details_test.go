@@ -106,35 +106,6 @@ var _ = Describe("NewStatus", func() {
 	})
 })
 
-var _ = Describe("NewEntryStatus", func() {
-	It("is nil for a nil error", func() {
-		Expect(aip.NewEntryStatus(nil, 0)).To(BeNil())
-	})
-
-	It("names the fields of its BadRequest under the entry", func() {
-		field := aip.NewFieldError(&testpb.GetBookRequest{}, "name", errors.New("bad"))
-		err := connect.NewError(connect.CodeInvalidArgument, "The request contains invalid parameters").
-			WithDetail(aip.NewBadRequest(field))
-
-		result := aip.NewEntryStatus(err, 2)
-
-		request := &errdetails.BadRequest{}
-		Expect(result.GetDetails()[0].UnmarshalTo(request)).To(Succeed())
-		Expect(request.GetFieldViolations()[0].GetField()).To(Equal("requests[2].name"))
-	})
-
-	It("leaves details that are not a BadRequest as they were", func() {
-		err := connect.NewError(connect.CodeNotFound, "The requested book was not found").
-			WithDetail(aip.NewErrorDetail(&errdetails.ResourceInfo{ResourceName: "books/dune"}))
-
-		result := aip.NewEntryStatus(err, 5)
-
-		resource := &errdetails.ResourceInfo{}
-		Expect(result.GetDetails()[0].UnmarshalTo(resource)).To(Succeed())
-		Expect(resource.GetResourceName()).To(Equal("books/dune"))
-	})
-})
-
 // namedResource is a resource name with the type and the text a spec gives it.
 type namedResource struct {
 	aip.ResourceName
