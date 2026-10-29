@@ -282,24 +282,6 @@ var _ = Describe("ResourcePattern", func() {
 			Expect(pattern.Validate("p1")).To(MatchError(ContainSubstring("got 1 values, want 2")))
 		})
 	})
-
-	Describe("ValidateResourceID", func() {
-		It("accepts a plain ID", func() {
-			Expect(aip.ValidateResourceID("t1")).To(Succeed())
-		})
-
-		It("accepts the wildcard", func() {
-			Expect(aip.ValidateResourceID(aip.ResourceWildcard)).To(Succeed())
-		})
-
-		It("rejects an empty ID", func() {
-			Expect(aip.ValidateResourceID("")).To(MatchError("empty"))
-		})
-
-		It("rejects an ID containing a separator", func() {
-			Expect(aip.ValidateResourceID("a/b")).To(MatchError("contains illegal character '/'"))
-		})
-	})
 })
 
 // bookName mirrors the shape protoc-gen-go-aip emits, including the

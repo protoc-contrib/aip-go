@@ -437,27 +437,14 @@ func (p *ResourcePattern) Validate(values ...string) error {
 		}
 		value := values[next]
 		next++
-		if err := ValidateResourceID(value); err != nil {
-			return fmt.Errorf("%s: %w", segment.name, err)
+		switch {
+		case value == "":
+			return fmt.Errorf("%s: empty", segment.name)
+		case strings.IndexByte(value, '/') != -1:
+			return fmt.Errorf("%s: contains illegal character '/'", segment.name)
 		}
 	}
 	return nil
-}
-
-// ValidateResourceID reports whether id is usable as a single resource ID
-// segment.
-//
-// An ID must be non-empty and must not contain the '/' separator, which would
-// silently split one segment into two.
-func ValidateResourceID(id string) error {
-	switch {
-	case id == "":
-		return errors.New("empty")
-	case strings.IndexByte(id, '/') != -1:
-		return errors.New("contains illegal character '/'")
-	default:
-		return nil
-	}
 }
 
 // ResourceName is the behavior shared by every resource name type emitted by
