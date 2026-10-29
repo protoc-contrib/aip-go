@@ -1,14 +1,14 @@
 // Package aip implements the Google API Improvement Proposals in Go.
 //
 // Everything lives in this one package, so a server reads as
-// `aip.ClearFields`, `aip.ValidateFields`, `aip.ResourcePattern` rather than a
+// `aip.ClearFields`, `aip.ValidateFields`, `aip.NewFieldError` rather than a
 // handful of one-type imports. Names are prefixed by the AIP concept they
 // belong to, not by a package path.
 //
 // The AIPs implemented here:
 //
-//   - AIP-122 resource names — [ResourcePattern] (relative and fully-qualified
-//     scans, [ParseError] for what was wrong), [ResourceName]
+//   - AIP-122 resource names — [ResourceName], what a generated name type
+//     satisfies
 //   - AIP-133, AIP-134, AIP-233, AIP-234 request shapes — [ResourceWrites]
 //   - AIP-134 field masks — [ImpliedFieldMask] for an update's omitted mask,
 //     [ClearFieldMask] to remove the paths of a kind, such as OUTPUT_ONLY, from
