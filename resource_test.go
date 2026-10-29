@@ -94,7 +94,7 @@ var _ = Describe("ResourcePattern", func() {
 			var project, thing string
 			Expect(pattern.Scan("projects/-/things/t1", &project, &thing)).To(Succeed())
 			Expect(project).To(Equal("-"))
-			Expect(aip.ContainsWildcard(project, thing)).To(BeTrue())
+			Expect(thing).To(Equal("t1"))
 		})
 
 		DescribeTable("rejects names that do not match",
@@ -300,20 +300,6 @@ var _ = Describe("ResourcePattern", func() {
 			Expect(aip.ValidateResourceID("a/b")).To(MatchError("contains illegal character '/'"))
 		})
 	})
-
-	Describe("ContainsWildcard", func() {
-		It("reports a wildcard anywhere in the list", func() {
-			Expect(aip.ContainsWildcard("a", "-", "b")).To(BeTrue())
-			Expect(aip.ContainsWildcard("-")).To(BeTrue())
-		})
-
-		It("reports no wildcard otherwise", func() {
-			Expect(aip.ContainsWildcard("a", "b")).To(BeFalse())
-			Expect(aip.ContainsWildcard()).To(BeFalse())
-			// A hyphen inside an ID is not the wildcard.
-			Expect(aip.ContainsWildcard("a-b")).To(BeFalse())
-		})
-	})
 })
 
 // bookName mirrors the shape protoc-gen-go-aip emits, including the
@@ -342,10 +328,6 @@ func (n bookName) Validate() error  { return bookNamePattern.Validate(n.Publishe
 
 func (n bookName) MarshalText() ([]byte, error) { return []byte(n.String()), nil }
 
-func (n bookName) ContainsWildcard() bool {
-	return aip.ContainsWildcard(n.PublisherID, n.BookID)
-}
-
 var _ = Describe("ResourceName", func() {
 	It("is satisfied by the generated resource name shape", func() {
 		var name aip.ResourceName = bookName{PublisherID: "p1", BookID: "b1"}
@@ -355,7 +337,6 @@ var _ = Describe("ResourceName", func() {
 		Expect(name.Type()).To(Equal("example.com/Book"))
 		Expect(name.Pattern()).To(Equal("publishers/{publisher}/books/{book}"))
 		Expect(name.Validate()).To(Succeed())
-		Expect(name.ContainsWildcard()).To(BeFalse())
 
 		text, err := name.MarshalText()
 		Expect(err).NotTo(HaveOccurred())
@@ -369,9 +350,8 @@ var _ = Describe("ResourceName", func() {
 		Expect(parsed.String()).To(Equal("publishers/p1/books/b1"))
 	})
 
-	It("reports a wildcard segment through the interface", func() {
+	It("accepts a wildcard segment in Validate", func() {
 		var name aip.ResourceName = bookName{PublisherID: "-", BookID: "b1"}
-		Expect(name.ContainsWildcard()).To(BeTrue())
 		Expect(name.Validate()).To(Succeed())
 	})
 

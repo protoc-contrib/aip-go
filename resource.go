@@ -460,20 +460,6 @@ func ValidateResourceID(id string) error {
 	}
 }
 
-// ContainsWildcard reports whether any of ids is the AIP-159 wildcard "-".
-//
-// A name containing a wildcard identifies a collection to read across rather
-// than a single resource, so storage layers should treat it as a query rather
-// than a lookup.
-func ContainsWildcard(ids ...string) bool {
-	for _, id := range ids {
-		if id == ResourceWildcard {
-			return true
-		}
-	}
-	return false
-}
-
 // ResourceName is the behavior shared by every resource name type emitted by
 // protoc-gen-go-aip.
 //
@@ -500,8 +486,4 @@ type ResourceName interface {
 	Pattern() string
 	// Validate reports whether every variable segment is usable.
 	Validate() error
-	// ContainsWildcard reports whether any variable segment is the AIP-159
-	// wildcard, meaning the name identifies a collection to read across
-	// rather than a single resource.
-	ContainsWildcard() bool
 }
