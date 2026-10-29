@@ -11,14 +11,14 @@ import "github.com/protoc-contrib/aip-go"
 ```
 
 Everything is one package, so a handler reads as `aip.ClearFields`,
-`aip.ValidateFields`, `aip.ResourcePattern` — names are prefixed by the AIP
+`aip.ValidateFields`, `aip.NewFieldError` — names are prefixed by the AIP
 concept, not by a package path.
 
 ## Status
 
 | AIP | Concept | Status |
 | --- | --- | --- |
-| [122](https://google.aip.dev/122) | resource names | ✅ runtime only |
+| [122](https://google.aip.dev/122) | resource names | ✅ `ResourceName`, what a generated name satisfies |
 | [132](https://google.aip.dev/132#ordering) | `order_by` | not here — query layer |
 | [158](https://google.aip.dev/158) | `page_token` / `page_size` | not here — query layer |
 | [134](https://google.aip.dev/134) | implied field mask | ✅ `ImpliedFieldMask` |
@@ -243,53 +243,10 @@ names; pass a function to answer it with details of your own.
 
 ## Resource names
 
-Resource name *types* stay generated — `protoc-gen-go-aip` emits a concrete
-`BookName{PublisherID, BookID string}` with typed `Parent()` and builders, and
-that type safety is the whole point. What lives here is the machinery behind
-those methods, so a fix to segment walking ships as a `go.mod` bump instead of
-a regen across every consumer:
-
-```go
-var bookNamePattern = aip.MustCompileResourcePattern("publishers/{publisher}/books/{book}")
-
-func ParseBookName(s string) (BookName, error) {
-        var out BookName
-        if err := bookNamePattern.Scan(s, &out.PublisherID, &out.BookID); err != nil {
-                return BookName{}, err
-        }
-        return out, nil
-}
-
-func (n BookName) String() string  { return bookNamePattern.Format(n.PublisherID, n.BookID) }
-func (n BookName) Validate() error { return bookNamePattern.Validate(n.PublisherID, n.BookID) }
-```
-
-`Scan` walks the name in place and allocates nothing — it is faster than the
-`strings.Split` it replaces (42ns/0 allocs vs 51ns/1 alloc on an Apple M-series
-machine). `Format` costs about 10ns more than inlined concatenation for the
-same single allocation.
-
-`ScanFull(name, domain, …)` scans the fully-qualified form,
-`//example.com/publishers/p1/books/b1`, as `Scan` does the relative one: the
-service name is the part of the resource type before the `/`. A failure is a
-`*aip.ParseError`, which says what was wrong — `Kind` is `ParseSegmentCount`,
-`ParseLiteral`, `ParseEmptyValue` or, for a bad prefix, `ParsePrefix`, with the
-`Pattern`, the `Name` and the kind's details beside it — and is still
-`aip.ErrInvalidResourceName` to `errors.Is`:
-
-```go
-var perr *aip.ParseError
-if errors.As(err, &perr) && perr.Kind == aip.ParseLiteral {
-        // perr.Index, perr.Want, perr.Got
-}
-```
-
-`InvalidValue` and `InvalidID` build the other two kinds for a caller that
-converts a segment (`ParseInvalidValue`) or a create's bare `<resource>_id`
-(`ParseInvalidID`) and refuses it.
-
-There is deliberately no runtime parser taking a pattern string as public API:
-callers get `ParseBookName(s)`, never `Scan(s, "publishers/{publisher}/...")`.
+Resource name *types* are generated — `protoc-gen-go-aip` emits a concrete
+`BookName{PublisherID, BookID string}` with its parser, typed `Parent()` and
+builders, and that type safety is the whole point. Nothing of the parsing lives
+here.
 
 `ResourceName` is the interface every generated name type satisfies, for code
 that must handle a name without knowing which one it is — logging, authz,
