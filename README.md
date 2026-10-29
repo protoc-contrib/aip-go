@@ -203,9 +203,8 @@ names, built here: `NewErrorInfo` (the reason and the domain, the service's
 name), `NewResourceInfo` for the resource an error is about, `NewRetryInfo` for
 how long to wait before a retry, `NewBadRequest` for the request field a `*FieldError` names
 (its description is fixed, since an error's own text can carry the value),
-`NewDebugInfo` for the cause and the stack, and `NameRequestError` to name the
-`name` or `parent` of a request whose resource name failed to yield an id.
-`NewErrorDetail` packs any other message. Which details an error carries, the
+`NewDebugInfo` for the cause and the stack. `NewErrorDetail` packs any other
+message. Which details an error carries, the
 reasons, and the domain are the service's own.
 
 `NewErrorInterceptor` is the single place a failure is logged. It logs each

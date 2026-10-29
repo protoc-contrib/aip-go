@@ -11,7 +11,6 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -88,25 +87,6 @@ func NewDebugInfo(cause error) *connect.ErrorDetail {
 		}
 	}
 	return NewErrorDetail(info)
-}
-
-// NameRequestError returns the [*FieldError] for err, a failure to read an id
-// from the resource name a request carries, such as a wildcard where an id is
-// needed. The field is the request's own: its `name`, or its `parent` where it
-// has no `name` (AIP-131 to AIP-135). nil in, nil out, so a handler can test the
-// result in place of err. It panics if req has neither field: a handler passing
-// such a request is a bug.
-func NameRequestError(req proto.Message, err error) error {
-	if err == nil {
-		return nil
-	}
-	fields := req.ProtoReflect().Descriptor().Fields()
-	for _, name := range []string{"name", "parent"} {
-		if fields.ByName(protoreflect.Name(name)) != nil {
-			return NewFieldError(req, name, err)
-		}
-	}
-	panic(fmt.Sprintf("aip.NameRequestError: %s has neither a name nor a parent field", req.ProtoReflect().Descriptor().FullName()))
 }
 
 // NewStatus converts err into the [*status.Status] (google.rpc.Status) of a

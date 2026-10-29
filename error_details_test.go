@@ -67,34 +67,6 @@ var _ = Describe("NewDebugInfo", func() {
 	})
 })
 
-var _ = Describe("NameRequestError", func() {
-	It("is nil for a nil error", func() {
-		Expect(aip.NameRequestError(&testpb.GetBookRequest{}, nil)).To(BeNil())
-	})
-
-	It("names the request's `name` field", func() {
-		err := aip.NameRequestError(&testpb.GetBookRequest{}, errors.New("a wildcard is no id"))
-
-		var field *aip.FieldError
-		Expect(errors.As(err, &field)).To(BeTrue())
-		Expect(field.Field()).To(Equal("name"))
-	})
-
-	It("names `parent` for a request that has no `name`", func() {
-		err := aip.NameRequestError(&testpb.BatchCreateBooksRequest{}, errors.New("a wildcard is no id"))
-
-		var field *aip.FieldError
-		Expect(errors.As(err, &field)).To(BeTrue())
-		Expect(field.Field()).To(Equal("parent"))
-	})
-
-	It("panics for a request that has neither", func() {
-		Expect(func() {
-			aip.NameRequestError(&errdetails.RetryInfo{}, errors.New("bad"))
-		}).To(PanicWith(ContainSubstring("neither a name nor a parent")))
-	})
-})
-
 var _ = Describe("NewStatus", func() {
 	It("is nil for a nil error", func() {
 		Expect(aip.NewStatus(nil)).To(BeNil())
