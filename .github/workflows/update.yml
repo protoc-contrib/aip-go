@@ -26,5 +26,7 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
           pr-title: "chore(flake): update flake.lock"
-          pr-labels: dependencies
+          pr-labels: |
+            dependencies
+            auto-merge
           commit-msg: "chore(flake): update flake.lock"
